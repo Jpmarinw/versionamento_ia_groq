@@ -14,7 +14,7 @@ class GroqEngine:
             
         self.client = Groq(api_key=self.api_key)
         # É possível mudar o modelo no .env (ex: llama3-70b-8192, mixtral-8x7b-32768)
-        self.model_name = os.getenv("MODEL_NAME", "llama3-8b-8192")
+        self.model_name = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
 
     def generate_report(self, prompt: str) -> str:
         """
