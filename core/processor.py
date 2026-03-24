@@ -25,13 +25,13 @@ class CommitProcessor:
         evolution_instruction = ""
         summaries_text = ""
         
-        if commit_summaries:
+        if commit_summaries and len(commit_summaries) > 1:
             # Reverte a lista para mostrar a evolução cronológica (do primeiro ao último)
             chronological_commits = list(reversed(commit_summaries))
-            summaries_text = "\n### EVOLUÇÃO HISTÓRICA DO TRABALHO (DA BASE PARA O MERGE):\n" + "\n".join(chronological_commits) + "\n"
+            summaries_text = "\n### EVOLUÇÃO HISTÓRICA DO TRABALHO:\n" + "\n".join(chronological_commits) + "\n"
             evolution_instruction = """
-Esta análise refere-se a um PULL REQUEST/MERGE com múltiplos commits. 
-É CRÍTICO que você descreva como a tarefa EVOLUIU desde o primeiro commit até o merge final.
+Esta entrega contém MÚLTIPLOS COMMITS. 
+É CRÍTICO que você descreva como a tarefa EVOLUIU desde o primeiro commit até o último.
 Analise a lista de commits acima para entender a linha do tempo e mencione essa evolução no relatório."""
 
         return f"""Você é um Engenheiro de Software Sênior especializado em revisão de código e arquitetura.
@@ -50,10 +50,10 @@ Mensagem Principal: {commit_message}
 Escreva o relatório EXCLUSIVAMENTE em Português do Brasil seguindo ESTRITAMENTE o formato abaixo:
 
 ## Resumo Executivo
-(Explique o que foi feito de forma simples, focando no objetivo final da PR).
+(Explique o que foi feito de forma simples, focando no objetivo final desta entrega/alteração de código).
 
 ## Linha do Tempo e Evolução
-(Se houver múltiplos commits, descreva aqui o passo-a-passo de como a tarefa foi construída, citando os pontos chaves de cada etapa importante).
+(Se houver múltiplos commits na entrega, descreva aqui o passo-a-passo. Se for apenas um commit de rotina, remova esta seção do relatório).
 
 ## Detalhes das Mudanças Técnicas
 (Liste as alterações chave no código: o que mudou, arquivos afetados e lógica aplicada).
