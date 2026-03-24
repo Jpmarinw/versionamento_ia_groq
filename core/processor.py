@@ -10,8 +10,6 @@ class CommitProcessor:
     def clean_diff(self, raw_diff: str) -> str:
         """
         Limita o tamanho do diff para não extrapolar a janela de contexto.
-        No Groq temos até 8K caracteres nativos no llama3-8b-8192, mas
-        manteremos o limitador para controle de tokens.
         """
         import os
         max_length = int(os.getenv("MAX_DIFF_LENGTH", 4000))

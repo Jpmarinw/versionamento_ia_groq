@@ -57,8 +57,6 @@ class GitHubProvider:
         """
         url = f"{self.base_url}/commits/{sha}"
         
-        # O cabeçalho 'application/vnd.github.v3.diff' instrui a API do GitHub
-        # a retornar o diff no formato patch em vez de um objeto JSON.
         headers = self.headers.copy()
         headers["Accept"] = "application/vnd.github.v3.diff"
         

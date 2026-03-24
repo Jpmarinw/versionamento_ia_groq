@@ -3,7 +3,7 @@ from groq import Groq
 
 class GroqEngine:
     """
-    Classe para realizar as chamadas avançadas à API cloud do Groq (nativa e ultra-rápida).
+    Classe para realizar as chamadas avançadas à API cloud do Groq.
     """
     
     def __init__(self):
@@ -13,7 +13,6 @@ class GroqEngine:
             raise ValueError("Chave GROQ_API_KEY não encontrada no arquivo .env.")
             
         self.client = Groq(api_key=self.api_key)
-        # É possível mudar o modelo no .env (ex: llama3-70b-8192, mixtral-8x7b-32768)
         self.model_name = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
 
     def generate_report(self, prompt: str) -> str:
@@ -29,7 +28,7 @@ class GroqEngine:
                     }
                 ],
                 model=self.model_name,
-                temperature=0.3, # Foco na precisão, não queremos alucinações no relatório técnico
+                temperature=0.3, # Foco na precisão.
             )
             
             return chat_completion.choices[0].message.content
