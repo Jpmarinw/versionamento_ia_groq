@@ -70,12 +70,12 @@ def main():
         report = processor.process_and_report(message, diff, commit_summaries)
         
         # Salva o relatório num arquivo .md dentro da pasta reports
-        save_report(sha, report, author, date, ai.model_name)
+        save_report(sha, report, author, date, ai.model_name, repo_name=os.getenv("GITEA_REPO", "repo"))
 
     except Exception as e:
         print(f"Ocorreu um erro na execução: {e}")
 
-def save_report(sha: str, report: str, author: str, date_str: str, model_name: str):
+def save_report(sha: str, report: str, author: str, date_str: str, model_name: str, repo_name: str = "repo"):
     if not os.path.exists("reports"):
         os.makedirs("reports")
         
@@ -87,11 +87,14 @@ def save_report(sha: str, report: str, author: str, date_str: str, model_name: s
     except ValueError:
         formatted_date = date_str
         
+    author_sanitized = author.lower().replace(" ", "_").replace("-", "_")
+    repo_sanitized = repo_name.lower().replace(" ", "_").replace("-", "_")
     data_atual = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    file_name = f"reports/commit_{sha[:7]}_{data_atual}.md"
+    file_name = f"reports/commit_{repo_sanitized}_{author_sanitized}_{data_atual}.md"
     
     with open(file_name, "w", encoding="utf-8") as file:
         file.write(f"# Relatório de Análise Automática - {sha[:7]}\n\n")
+        file.write(f"**Repositório:** {repo_name}\n")
         file.write(f"**Autor do Commit:** {author}\n")
         file.write(f"**Data do Commit:** {formatted_date}\n\n")
         file.write("---\n\n")

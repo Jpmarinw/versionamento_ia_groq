@@ -20,7 +20,7 @@ class CommitProcessor:
 
     def build_prompt(self, commit_message: str, diff: str, commit_summaries: list[str] = None) -> str:
         """
-        Constrói o Super Prompt de Engenharia de Software.
+        Constrói o Prompt de Engenharia de Software.
         """
         evolution_instruction = ""
         summaries_text = ""

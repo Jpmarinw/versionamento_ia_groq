@@ -8,16 +8,16 @@ class GiteaProvider:
     sobre commits e os diffs associados a eles.
     """
     
-    def __init__(self):
+    def __init__(self, user: str = None, repo: str = None):
         self.token = os.getenv("GITEA_TOKEN")
         self.url = os.getenv("GITEA_URL", "https://gitea.com").rstrip("/")
-        self.user = os.getenv("GITEA_USER")
-        self.repo = os.getenv("GITEA_REPO")
+        self.user = user or os.getenv("GITEA_ORG")
+        self.repo = repo or os.getenv("GITEA_REPO")
         
         if not all([self.token, self.user, self.repo]):
-            raise ValueError("Configurações do Gitea (TOKEN, USER, REPO) ausentes no .env.")
+            raise ValueError("Configurações do Gitea (TOKEN, USER, REPO) ausentes. Forneça via argumentos ou .env.")
             
-        # API do Gitea geralmente fica em /api/v1
+        # API do Gitea
         self.base_url = f"{self.url}/api/v1/repos/{self.user}/{self.repo}"
         self.headers = {
             "Authorization": f"token {self.token}",
