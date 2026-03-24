@@ -2,7 +2,7 @@ import os
 import datetime
 from dotenv import load_dotenv
 
-from core.git_provider import GitHubProvider
+from core.git_provider import GiteaProvider
 from core.ai_engine import GroqEngine
 from core.processor import CommitProcessor
 
@@ -13,8 +13,8 @@ def main():
     print("Iniciando o AI Commit Reporter (Nuven Edition - Groq)...")
     
     # Validação simples
-    if not os.getenv("GITHUB_TOKEN"):
-        print("ERRO: O GITHUB_TOKEN não está definido. Verifique o arquivo .env.")
+    if not os.getenv("GITEA_TOKEN"):
+        print("ERRO: O GITEA_TOKEN não está definido. Verifique o arquivo .env.")
         return
     if not os.getenv("GROQ_API_KEY"):
         print("ERRO: A GROQ_API_KEY não está logada. Verifique o arquivo .env.")
@@ -22,14 +22,43 @@ def main():
 
     try:
         # 1. Recupera as informações do Git
-        print(f"1/3 -> Conectando ao repositório GitHub ({os.getenv('GITHUB_USER')}/{os.getenv('GITHUB_REPO')})...")
-        git = GitHubProvider()
-        sha, message, author, date = git.get_latest_commit()
+        print(f"1/3 -> Conectando ao repositório Gitea em {os.getenv('GITEA_URL')} ({os.getenv('GITEA_USER')}/{os.getenv('GITEA_REPO')})...")
+        git = GiteaProvider()
+        latest = git.get_latest_commit()
         
-        print(f"Commit encontrado: {sha[:7]} - {message}")
+        sha = latest["sha"]
+        message = latest["message"]
+        author = latest["author"]
+        date = latest["date"]
+        parents = latest["parents"]
         
-        print("Obtendo diff das mudanças...")
-        diff = git.get_commit_diff(sha)
+        commit_summaries = None
+        
+        # Detector de Merge: Se houver mais de um pai, é um merge (provavelmente Pull Request)
+        if len(parents) > 1:
+            print(f"Detectado commit de Merge ({sha[:7]}).")
+            
+            # Tenta extrair o ID do Pull Request da mensagem (padrão: #95 ou (#95))
+            import re
+            pr_match = re.search(r'#(\d+)', message)
+            
+            if pr_match:
+                pr_id = pr_match.group(1)
+                print(f"Identificado Pull Request #{pr_id}. Buscando detalhes da PR...")
+                try:
+                    diff, commit_summaries = git.get_pull_request_info(pr_id)
+                    print(f"Total de {len(commit_summaries)} commits encontrados na PR #{pr_id}.")
+                except Exception as e:
+                    print(f"Aviso: Falha ao buscar dados da PR #{pr_id} ({e}). Tentando comparação genérica...")
+                    diff, commit_summaries = git.get_compare_info(parents[0], sha)
+            else:
+                print("Nenhum ID de PR encontrado na mensagem. Usando comparação de intervalo...")
+                diff, commit_summaries = git.get_compare_info(parents[0], sha)
+                print(f"Total de {len(commit_summaries)} commits encontrados no intervalo.")
+        else:
+            print(f"Commit individual encontrado: {sha[:7]} - {message}")
+            print("Obtendo diff das mudanças...")
+            diff = git.get_commit_diff(sha)
         
         # 2. Configura a Inteligência Artificial e o Processador
         print("2/3 -> Engatando marcha com a plataforma GroqCloud...")
@@ -37,8 +66,8 @@ def main():
         processor = CommitProcessor(ai)
         
         # 3. Processa e Gera o Relatório
-        print("3/3 -> Analisando contexto de código (isso ocorrerá quase instantaneamente).")
-        report = processor.process_and_report(message, diff)
+        print("3/3 -> Analisando contexto de código (isso poderá incluir vários commits se for merge).")
+        report = processor.process_and_report(message, diff, commit_summaries)
         
         # Salva o relatório num arquivo .md dentro da pasta reports
         save_report(sha, report, author, date, ai.model_name)
@@ -63,7 +92,6 @@ def save_report(sha: str, report: str, author: str, date_str: str, model_name: s
     
     with open(file_name, "w", encoding="utf-8") as file:
         file.write(f"# Relatório de Análise Automática - {sha[:7]}\n\n")
-        file.write(f"**Revisor de IA:** GroqCloud ({model_name})\n")
         file.write(f"**Autor do Commit:** {author}\n")
         file.write(f"**Data do Commit:** {formatted_date}\n\n")
         file.write("---\n\n")
