@@ -23,16 +23,49 @@ templates = Jinja2Templates(directory="templates")
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     """
-    Lista todos os repositórios (pastas dentro de reports/)
+    Dashboard principal: lista repositórios e os 10 relatórios mais recentes.
     """
     reports_dir = "reports"
     repos = []
+    recent_reports = []
+    
     if os.path.exists(reports_dir):
-        # Listamos apenas as subpastas
+        # 1. Listamos as subpastas (repositórios)
         repos = [d for d in os.listdir(reports_dir) if os.path.isdir(os.path.join(reports_dir, d))]
+        
+        # 2. Buscamos os 10 mais recentes em todas as pastas
+        all_files = []
+        for root, dirs, files in os.walk(reports_dir):
+            for f in files:
+                if f.endswith(".md"):
+                    repo_folder = os.path.basename(root)
+                    # Extrai data amigável do nome do arquivo
+                    parts = f.split("_")
+                    if len(parts) >= 2:
+                        d, t = parts[-2], parts[-1].replace(".md", "")
+                        # Criamos uma chave para ordenação (YYYYMMDD_HHMMSS)
+                        sort_key = f"{d}_{t}"
+                        date_display = f"{d[6:8]}/{d[4:6]}/{d[0:4]} {t[0:2]}:{t[2:4]}"
+                        
+                        all_files.append({
+                            "repo": repo_folder,
+                            "filename": f,
+                            "name": f.replace(".md", "").replace("commit_", "").replace(repo_folder, "").strip("_"),
+                            "date": date_display,
+                            "sort_key": sort_key
+                        })
+        
+        # Ordena pelo sort_key descendente e pega os 10 primeiros
+        all_files.sort(key=lambda x: x["sort_key"], reverse=True)
+        recent_reports = all_files[:10]
     
     return templates.TemplateResponse(
-        request=request, name="index.html", context={"repos": sorted(repos)}
+        request=request, 
+        name="index.html", 
+        context={
+            "repos": sorted(repos),
+            "recent_reports": recent_reports
+        }
     )
 
 @app.get("/repo/{repo_name}", response_class=HTMLResponse)
@@ -95,12 +128,12 @@ async def view_report(request: Request, repo_name: str, filename: str):
 
 # --- LÓGICA DO WEBHOOK (MANTIDA) ---
 
-def process_webhook_event(sha: str, message: str, author: str, date: str, owner: str, repo: str, is_pr: bool = False, commit_summaries: list[str] = None, diff_override: str = None):
+def process_webhook_event(sha: str, message: str, author: str, date: str, owner: str, repo: str, is_pr: bool = False, commit_summaries: list[str] = None, diff_override: str = None, branch_name: str = "main"):
     """
     Executa o fluxo de geração de relatório em segundo plano.
     """
     try:
-        print(f"Processando {'PR' if is_pr else 'Push'} em {owner}/{repo}...")
+        print(f"Processando {'PR' if is_pr else 'Push'} em [{branch_name}] {owner}/{repo}...")
         
         git = GiteaProvider(user=owner, repo=repo)
         
@@ -122,7 +155,7 @@ def process_webhook_event(sha: str, message: str, author: str, date: str, owner:
         report = processor.process_and_report(message, diff, commit_summaries)
         
         # Salva o relatório
-        save_report(sha, report, author, date, ai.model_name, repo_name=repo)
+        save_report(sha, report, author, date, ai.model_name, repo_name=repo, branch_name=branch_name)
         print(f"Relatório gerado com sucesso!")
         
     except Exception as e:
@@ -153,8 +186,10 @@ async def gitea_webhook(request: Request, background_tasks: BackgroundTasks):
         title = pr.get("title")
         author = pr.get("user", {}).get("full_name") or pr.get("user", {}).get("login")
         date = pr.get("updated_at") or pr.get("created_at")
+        # No PR, o destino é o 'base.ref'
+        target_branch = pr.get("base", {}).get("ref") or "main"
         
-        background_tasks.add_task(process_webhook_event, pr_id, f"PR #{pr_id}: {title}", author, date, owner, repo_name, is_pr=True)
+        background_tasks.add_task(process_webhook_event, pr_id, f"PR #{pr_id}: {title}", author, date, owner, repo_name, is_pr=True, branch_name=target_branch)
         return {"status": "success", "message": f"Pull Request #{pr_id} enviado para análise."}
 
     # 2. TRATAMENTO DE PUSH (Agrupado)
@@ -163,29 +198,29 @@ async def gitea_webhook(request: Request, background_tasks: BackgroundTasks):
         if not commits:
             return {"status": "ignored", "message": "Push sem commits."}
             
+        # Extrai o nome da branch do campo 'ref' (ex: refs/heads/main)
+        ref = payload.get("ref", "refs/heads/main")
+        branch_name = ref.split("/")[-1]
+
         pusher = payload.get("pusher", {})
         author = pusher.get("full_name") or pusher.get("username") or commits[0]["author"]["name"]
         date = commits[0]["timestamp"]
-        repo_full_name = f"{owner}/{repo_name}"
         
         if len(commits) == 1:
             # Commit único: processamento simples
-            background_tasks.add_task(process_webhook_event, commits[0]["id"], commits[0]["message"], author, date, owner, repo_name)
+            background_tasks.add_task(process_webhook_event, commits[0]["id"], commits[0]["message"], author, date, owner, repo_name, branch_name=branch_name)
         else:
-            # Múltiplos commits: Agrupamos os diffs (Ou usamos compare se preferir)
+            # Múltiplos commits: Agrupamos os diffs
             commit_summaries = [f"- {c['message']} ({c['id'][:7]})" for c in commits]
             
-            # Buscamos o diff comparando o 'before' e o 'after' do push
             before = payload.get("before")
             after = payload.get("after")
             
             git = GiteaProvider(user=owner, repo=repo)
             try:
-                # Se before/after existem, usamos o compare para pegar o diff consolidado
                 if before and after and before != "0000000000000000000000000000000000000000":
                     diff, _ = git.get_compare_info(before, after)
                 else:
-                    # Fallback: soma simples dos diffs (menos eficiente mas funciona)
                     diff = ""
                     for c in commits:
                         diff += f"\n--- Commit {c['id'][:7]} ---\n" + git.get_commit_diff(c["id"])
@@ -193,9 +228,9 @@ async def gitea_webhook(request: Request, background_tasks: BackgroundTasks):
                 diff = "Erro ao coletar diff agrupado."
 
             aggr_message = f"Push de {len(commits)} commits agrupados."
-            background_tasks.add_task(process_webhook_event, after, aggr_message, author, date, owner, repo_name, commit_summaries=commit_summaries, diff_override=diff)
+            background_tasks.add_task(process_webhook_event, after, aggr_message, author, date, owner, repo_name, commit_summaries=commit_summaries, diff_override=diff, branch_name=branch_name)
             
-        return {"status": "success", "message": f"{len(commits)} commits do repo {repo_name} adicionados à fila."}
+        return {"status": "success", "message": f"{len(commits)} commits do repo {repo_name} (branch {branch_name}) adicionados à fila."}
     
     return {"status": "ignored", "message": "Evento não suportado."}
 

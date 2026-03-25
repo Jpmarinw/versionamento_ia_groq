@@ -75,7 +75,7 @@ def main():
     except Exception as e:
         print(f"Ocorreu um erro na execução: {e}")
 
-def save_report(sha: str, report: str, author: str, date_str: str, model_name: str, repo_name: str = "repo"):
+def save_report(sha: str, report: str, author: str, date_str: str, model_name: str, repo_name: str = "repo", branch_name: str = "main"):
     author_sanitized = author.lower().replace(" ", "_").replace("-", "_")
     repo_sanitized = repo_name.lower().replace(" ", "_").replace("-", "_")
     
@@ -101,6 +101,7 @@ def save_report(sha: str, report: str, author: str, date_str: str, model_name: s
     with open(file_name, "w", encoding="utf-8") as file:
         file.write(f"# Relatório de Análise Automática - {sha[:7]}\n\n")
         file.write(f"**Repositório:** {repo_name}  \n")
+        file.write(f"**Branch:** {branch_name}  \n")
         file.write(f"**Autor do Commit:** {author}  \n")
         file.write(f"**Data do Commit:** {formatted_date}  \n\n")
         file.write("---\n\n")
