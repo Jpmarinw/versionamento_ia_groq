@@ -76,21 +76,27 @@ def main():
         print(f"Ocorreu um erro na execução: {e}")
 
 def save_report(sha: str, report: str, author: str, date_str: str, model_name: str, repo_name: str = "repo"):
-    if not os.path.exists("reports"):
-        os.makedirs("reports")
+    author_sanitized = author.lower().replace(" ", "_").replace("-", "_")
+    repo_sanitized = repo_name.lower().replace(" ", "_").replace("-", "_")
+    
+    # Cria a estrutura de pastas reports/[repositorio]
+    repo_path = os.path.join("reports", repo_sanitized)
+    if not os.path.exists(repo_path):
+        os.makedirs(repo_path, exist_ok=True)
         
     try:
-        dt_utc = datetime.datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ")
+        from dateutil import parser
+        # O parser do dateutil consegue interpretar quase qualquer formato ISO 8601 (com ou sem Z, offset, etc)
+        dt_utc = parser.isoparse(date_str)
         tz_offset = int(os.getenv("TIMEZONE_OFFSET", "-4")) # Fuso de Manaus por padrão
         dt_local = dt_utc + datetime.timedelta(hours=tz_offset)
         formatted_date = dt_local.strftime(f"%d/%m/%Y às %H:%M:%S (UTC{tz_offset:+d})")
-    except ValueError:
+    except Exception:
+        # Fallback caso ocorra qualquer erro no parse (como o date value out of range)
         formatted_date = date_str
         
-    author_sanitized = author.lower().replace(" ", "_").replace("-", "_")
-    repo_sanitized = repo_name.lower().replace(" ", "_").replace("-", "_")
     data_atual = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    file_name = f"reports/commit_{repo_sanitized}_{author_sanitized}_{data_atual}.md"
+    file_name = os.path.join(repo_path, f"commit_{repo_sanitized}_{author_sanitized}_{data_atual}.md")
     
     with open(file_name, "w", encoding="utf-8") as file:
         file.write(f"# Relatório de Análise Automática - {sha[:7]}\n\n")
