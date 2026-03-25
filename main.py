@@ -100,9 +100,9 @@ def save_report(sha: str, report: str, author: str, date_str: str, model_name: s
     
     with open(file_name, "w", encoding="utf-8") as file:
         file.write(f"# Relatório de Análise Automática - {sha[:7]}\n\n")
-        file.write(f"**Repositório:** {repo_name}\n")
-        file.write(f"**Autor do Commit:** {author}\n")
-        file.write(f"**Data do Commit:** {formatted_date}\n\n")
+        file.write(f"**Repositório:** {repo_name}  \n")
+        file.write(f"**Autor do Commit:** {author}  \n")
+        file.write(f"**Data do Commit:** {formatted_date}  \n\n")
         file.write("---\n\n")
         file.write(report)
         

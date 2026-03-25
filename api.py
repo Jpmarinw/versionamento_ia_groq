@@ -1,15 +1,99 @@
 import os
-from fastapi import FastAPI, Request, BackgroundTasks
+from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from core.git_provider import GiteaProvider
 from core.ai_engine import GroqEngine
 from core.processor import CommitProcessor
 from main import save_report
+import markdown
 
 # Carrega as variáveis do arquivo .env
 load_dotenv()
 
-app = FastAPI(title="AI Commit Reporter API", description="Recebe webhooks do Gitea e gera relatórios automáticos.")
+app = FastAPI(title="AI Commit Reporter API", description="Dashboard e Webhook para relatórios de IA.")
+
+# Configuração de Templates
+templates = Jinja2Templates(directory="templates")
+
+# --- ROTAS DA INTERFACE UI ---
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """
+    Lista todos os repositórios (pastas dentro de reports/)
+    """
+    reports_dir = "reports"
+    repos = []
+    if os.path.exists(reports_dir):
+        # Listamos apenas as subpastas
+        repos = [d for d in os.listdir(reports_dir) if os.path.isdir(os.path.join(reports_dir, d))]
+    
+    return templates.TemplateResponse(
+        request=request, name="index.html", context={"repos": sorted(repos)}
+    )
+
+@app.get("/repo/{repo_name}", response_class=HTMLResponse)
+async def repo_list(request: Request, repo_name: str):
+    """
+    Lista os relatórios de um repositório específico
+    """
+    repo_path = os.path.join("reports", repo_name)
+    if not os.path.exists(repo_path):
+        raise HTTPException(status_code=404, detail="Repositório não encontrado")
+    
+    files = []
+    for f in os.listdir(repo_path):
+        if f.endswith(".md"):
+            # Extrai uma data amigável do nome do arquivo (se possível)
+            timestamp = f.split("_")[-2:] # Pega data e hora
+            date_display = "Recent"
+            if len(timestamp) == 2:
+                d, t = timestamp[0], timestamp[1].replace(".md", "")
+                date_display = f"{d[6:8]}/{d[4:6]}/{d[0:4]} {t[0:2]}:{t[2:4]}"
+            
+            files.append({
+                "filename": f,
+                "name": f.replace(".md", "").replace("commit_", "").replace(repo_name, "").strip("_"),
+                "date": date_display
+            })
+            
+    # Ordena pelo mais recente (nome do arquivo começa com data)
+    files.sort(key=lambda x: x["filename"], reverse=True)
+    
+    return templates.TemplateResponse(
+        request=request, name="repo.html", context={
+            "repo_name": repo_name, 
+            "reports": files
+        }
+    )
+
+@app.get("/repo/{repo_name}/{filename}", response_class=HTMLResponse)
+async def view_report(request: Request, repo_name: str, filename: str):
+    """
+    Renderiza um relatório Markdown específico em HTML
+    """
+    file_path = os.path.join("reports", repo_name, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Relatório não encontrado")
+    
+    with open(file_path, "r", encoding="utf-8") as f:
+        md_content = f.read()
+    
+    # Converte Markdown para HTML com extensões para tabelas, blocos de código e quebras de linha
+    html_content = markdown.markdown(md_content, extensions=['fenced_code', 'tables', 'nl2br'])
+    
+    return templates.TemplateResponse(
+        request=request, name="report.html", context={
+            "repo_name": repo_name,
+            "filename": filename,
+            "content": html_content
+        }
+    )
+
+# --- LÓGICA DO WEBHOOK (MANTIDA) ---
 
 def process_webhook_event(sha: str, message: str, author: str, date: str, owner: str, repo: str, is_pr: bool = False, commit_summaries: list[str] = None, diff_override: str = None):
     """
@@ -115,9 +199,6 @@ async def gitea_webhook(request: Request, background_tasks: BackgroundTasks):
     
     return {"status": "ignored", "message": "Evento não suportado."}
 
-@app.get("/")
-def health_check():
-    return {"status": "online", "service": "AI Commit Reporter API"}
 
 if __name__ == "__main__":
     import uvicorn

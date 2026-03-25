@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Relatórios de Commits{% endblock %}</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+          --primary: #4f46e5;
+          --primary-hover: #4338ca;
+          --bg: #f8fafc;
+          --card-bg: #ffffff;
+          --text-main: #1e293b;
+          --text-muted: #64748b;
+          --border: #e2e8f0;
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+          font-family: 'Inter', sans-serif;
+          background-color: var(--bg);
+          color: var(--text-main);
+          line-height: 1.5;
+      }
+
+      .navbar {
+          background: #ffffff;
+          border-bottom: 1px solid var(--border);
+          padding: 1rem 2rem;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          position: sticky;
+          top: 0;
+          z-index: 100;
+      }
+
+      .logo {
+          font-weight: 700;
+          font-size: 1.25rem;
+          color: var(--primary);
+          text-decoration: none;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+      }
+
+      .container {
+          max-width: 1000px;
+          margin: 2rem auto;
+          padding: 0 1rem;
+      }
+
+      .breadcrumb {
+          margin-bottom: 2rem;
+          font-size: 0.875rem;
+          color: var(--text-muted);
+      }
+
+      .breadcrumb a {
+          color: var(--primary);
+          text-decoration: none;
+      }
+    </style>
+    {% block extra_css %}{% endblock %}
+  </head>
+  <body>
+    <nav class="navbar">
+      <a href="/" class="logo"> <span>🚀</span> Relatórios de Commits - DGB </a>
+      <div style="font-size: 0.875rem; color: var(--text-muted)">
+        Hostname: <strong>LDD-NOTE-005</strong>
+      </div>
+    </nav>
+
+    <div class="container">{% block content %}{% endblock %}</div>
+  </body>
+</html>

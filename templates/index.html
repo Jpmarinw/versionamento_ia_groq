@@ -1,0 +1,70 @@
+{% extends "base.html" %} {% block content %}
+<header style="margin-bottom: 3rem; text-align: center">
+  <h1 style="font-size: 2.5rem; margin-bottom: 0.5rem">Repositórios</h1>
+  <p style="color: var(--text-muted)">
+    Selecione um projeto para visualizar os relatórios.
+  </p>
+</header>
+
+<div
+  style="
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+  "
+>
+  {% for repo in repos %}
+  <a href="/repo/{{ repo }}" style="text-decoration: none; color: inherit">
+    <div
+      style="
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        padding: 2rem;
+        border-radius: 12px;
+        transition:
+          transform 0.2s,
+          box-shadow 0.2s;
+        cursor: pointer;
+      "
+      onmouseover="
+        this.style.transform = 'translateY(-4px)';
+        this.style.boxShadow = '0 10px 15px -3px rgba(0,0,0,0.1)';
+      "
+      onmouseout="
+        this.style.transform = 'translateY(0)';
+        this.style.boxShadow = 'none';
+      "
+    >
+      <div style="font-size: 2rem; margin-bottom: 1rem">📁</div>
+      <h2
+        style="
+          font-size: 1.25rem;
+          margin-bottom: 0.5rem;
+          text-transform: capitalize;
+        "
+      >
+        {{ repo.replace('_', ' ').replace('-', ' ') }}
+      </h2>
+      <p style="font-size: 0.875rem; color: var(--text-muted)">
+        Clique para ver o histórico de commits.
+      </p>
+    </div>
+  </a>
+  {% else %}
+  <div
+    style="
+      grid-column: 1/-1;
+      text-align: center;
+      padding: 4rem;
+      background: #fff;
+      border-radius: 12px;
+      border: 1px dashed var(--border);
+    "
+  >
+    <p style="color: var(--text-muted)">
+      Nenhum relatório gerado ainda. Aguardando webhooks...
+    </p>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
