@@ -90,7 +90,7 @@ def save_report(sha: str, report: str, author: str, date_str: str, model_name: s
         dt_utc = parser.isoparse(date_str)
         tz_offset = int(os.getenv("TIMEZONE_OFFSET", "-4")) # Fuso de Manaus por padrão
         dt_local = dt_utc + datetime.timedelta(hours=tz_offset)
-        formatted_date = dt_local.strftime(f"%d/%m/%Y às %H:%M:%S (UTC{tz_offset:+d})")
+        formatted_date = dt_local.strftime("%d/%m/%Y - %H:%M")
     except Exception:
         # Fallback caso ocorra qualquer erro no parse (como o date value out of range)
         formatted_date = date_str

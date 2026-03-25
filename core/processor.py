@@ -20,46 +20,73 @@ class CommitProcessor:
 
     def build_prompt(self, commit_message: str, diff: str, commit_summaries: list[str] = None) -> str:
         """
-        Constrói o Prompt de Engenharia de Software.
+        Constrói o Prompt de Engenharia de Software com templates condicionais e concisos.
         """
-        evolution_instruction = ""
-        summaries_text = ""
+        is_multiple = commit_summaries and len(commit_summaries) > 1
         
-        if commit_summaries:
-            # Reverte a lista para mostrar a evolução cronológica (do primeiro ao último)
+        # 1. Instruções Comuns
+        common_instructions = """Você é um Engenheiro de Software Sênior. 
+Gere um relatório técnico OBJETIVO. 
+REGRAS CRÍTICAS: 
+- NÃO repita datas, SHAs ou metadados que já estão no cabeçalho. 
+- Foque estritamente em mudanças LÓGICAS e TÉCNICAS. 
+- Seja direto, evite "encher linguiça" ou introduções genéricas.
+- Escreva EXCLUSIVAMENTE em Português do Brasil."""
+
+        # 2. Corpo do Prompt baseados no volume de commits
+        if is_multiple:
             chronological_commits = list(reversed(commit_summaries))
-            summaries_text = "\n### EVOLUÇÃO HISTÓRICA DO TRABALHO (DA BASE PARA O MERGE):\n" + "\n".join(chronological_commits) + "\n"
-            evolution_instruction = """
-Esta análise refere-se a um PULL REQUEST/MERGE com múltiplos commits. 
-É CRÍTICO que você descreva como a tarefa EVOLUIU desde o primeiro commit até o merge final.
-Analise a lista de commits acima para entender a linha do tempo e mencione essa evolução no relatório."""
+            summaries_text = "\n### LISTA DE COMMITS (ORDEM CRONOLÓGICA):\n" + "\n".join(chronological_commits) + "\n"
+            
+            prompt_body = f"""{summaries_text}
 
-        return f"""Você é um Engenheiro de Software Sênior especializado em revisão de código e arquitetura.
-Sua missão é gerar um relatório técnico detalhado sobre as mudanças em um repositório git. 
+### INSTRUÇÃO:
+Esta entrega agrupa MÚLTIPLOS COMMITS. Descreva a PROGRESSÃO do trabalho na seção "Linha do Tempo e Evolução".
 
-### CONTEXTO DA MUDANÇA:
-Mensagem Principal: {commit_message}
-{summaries_text}
-{evolution_instruction}
-
-### DIFF TOTAL DAS MUDANÇAS (COMBINADO):
+### DIFF TOTAL (COMBINADO):
 ```diff
 {diff}
 ```
 
-Escreva o relatório EXCLUSIVAMENTE em Português do Brasil seguindo ESTRITAMENTE o formato abaixo:
+FORMATO DO RELATÓRIO:
 
 ## Resumo Executivo
-(Explique o que foi feito de forma simples, focando no objetivo final da PR).
+(O que foi resolvido no final das contas?)
 
 ## Linha do Tempo e Evolução
-(Se houver múltiplos commits, descreva aqui o passo-a-passo de como a tarefa foi construída, citando os pontos chaves de cada etapa importante).
+(Como a solução evoluiu passo-a-passo através dos commits listados).
 
 ## Detalhes das Mudanças Técnicas
-(Liste as alterações chave no código: o que mudou, arquivos afetados e lógica aplicada).
+(Mudanças chave na lógica e arquivos).
 
 ## Impacto e Conclusão
-(Explique os benefícios, riscos corrigidos e a qualidade final da solução).
+(Qualidade final e riscos).
+"""
+        else:
+            # Template para Commit Simples ou Direto (SEM Linha do Tempo)
+            prompt_body = f"""
+### DIFF DA MUDANÇA:
+```diff
+{diff}
+```
+
+FORMATO DO RELATÓRIO (NÃO inclua seção de Linha do Tempo):
+
+## Resumo Executivo
+(Explique o que foi feito de forma direta).
+
+## Detalhes Técnicos
+(Liste o que mudou no código e por quê).
+
+## Conclusão
+(Impacto da mudança).
+"""
+
+        return f"""{common_instructions}
+
+### CONTEXTO DA MUDANÇA:
+Mensagem Principal: {commit_message}
+{prompt_body}
 """
 
     def process_and_report(self, commit_message: str, raw_diff: str, commit_summaries: list[str] = None) -> str:
