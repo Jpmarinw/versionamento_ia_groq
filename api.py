@@ -15,8 +15,9 @@ load_dotenv()
 
 app = FastAPI(title="AI Commit Reporter API", description="Dashboard e Webhook para relatórios de IA.")
 
-# Configuração de Templates
+# Configuração de Templates e Estáticos
 templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # --- ROTAS DA INTERFACE UI ---
 

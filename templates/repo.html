@@ -1,102 +1,47 @@
 {% extends "base.html" %} {% block title %}Relatórios - {{ repo_name }}{%
 endblock %} {% block content %}
 <div class="breadcrumb">
-  <a href="/">Dashboard</a> / <span>{{ repo_name }}</span>
+    <a href="/">Dashboard</a> / <span>{{ repo_name }}</span>
 </div>
 
-<header style="margin-bottom: 2rem">
-  <h1 style="font-size: 2rem; text-transform: capitalize">
-    {{ repo_name.replace('_', ' ').replace('-', ' ') }}
-  </h1>
-  <p style="color: var(--text-muted)">
-    Histórico de análises para este repositório.
-  </p>
+<header class="repo-header">
+    <h1 class="repo-title">
+        {{ repo_name.replace('_', ' ').replace('-', ' ') }}
+    </h1>
+    <p class="repo-subtitle">Histórico de análises para este repositório.</p>
 </header>
 
-<div
-  style="
-    background: #fff;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    overflow: hidden;
-  "
->
-  <table style="width: 100%; border-collapse: collapse; text-align: left">
-    <thead style="background: #f1f5f9">
-      <tr>
-        <th
-          style="
-            padding: 1rem 1.5rem;
-            font-size: 0.875rem;
-            color: var(--text-muted);
-            font-weight: 600;
-          "
-        >
-          Relatório
-        </th>
-        <th
-          style="
-            padding: 1rem 1.5rem;
-            font-size: 0.875rem;
-            color: var(--text-muted);
-            font-weight: 600;
-          "
-        >
-          Data
-        </th>
-        <th
-          style="
-            padding: 1rem 1.5rem;
-            font-size: 0.875rem;
-            color: var(--text-muted);
-            font-weight: 600;
-          "
-        >
-          Ação
-        </th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for report in reports %}
-      <tr
-        style="border-top: 1px solid var(--border); transition: background 0.2s"
-        onmouseover="this.style.background = '#f8fafc'"
-        onmouseout="this.style.background = 'transparent'"
-      >
-        <td style="padding: 1rem 1.5rem">
-          <div style="font-weight: 500">{{ report.name }}</div>
-        </td>
-        <td
-          style="
-            padding: 1rem 1.5rem;
-            font-size: 0.875rem;
-            color: var(--text-muted);
-          "
-        >
-          {{ report.date }}
-        </td>
-        <td style="padding: 1rem 1.5rem">
-          <a
-            href="/repo/{{ repo_name }}/{{ report.filename }}"
-            style="
-              color: var(--primary);
-              font-weight: 600;
-              text-decoration: none;
-              font-size: 0.875rem;
-            "
-            >Ver Relatório →</a
-          >
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="table-container">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Relatório</th>
+                <th>Data</th>
+                <th>Ação</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for report in reports %}
+            <tr>
+                <td class="fw-500">
+                    <div>{{ report.name }}</div>
+                </td>
+                <td>{{ report.date }}</td>
+                <td>
+                    <a
+                        href="/repo/{{ repo_name }}/{{ report.filename }}"
+                        class="action-link"
+                        >Ver Relatório →</a
+                    >
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 
 {% if not reports %}
-<div style="text-align: center; padding: 4rem">
-  <p style="color: var(--text-muted)">
-    Nenhum relatório encontrado nesta pasta.
-  </p>
+<div class="empty-state">
+    <p>Nenhum relatório encontrado nesta pasta.</p>
 </div>
 {% endif %} {% endblock %}
