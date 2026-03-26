@@ -1,21 +1,27 @@
+import os
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 class CommitProcessor:
     """
     Processador dos dados extraídos do Git (GitHub/Gitea) para criar o Super Prompt e
     passar os dados limpos ao ai_engine.
     """
-    
+
     def __init__(self, ai_engine):
         self.ai = ai_engine
+        self.max_diff_length = int(os.getenv("MAX_DIFF_LENGTH", 4000))
 
     def clean_diff(self, raw_diff: str) -> str:
         """
         Limita o tamanho do diff para não extrapolar a janela de contexto.
         """
-        import os
-        max_length = int(os.getenv("MAX_DIFF_LENGTH", 4000))
-        
-        if len(raw_diff) > max_length:
-            return raw_diff[:max_length] + "\n\n... [DIFF TRUNCADO DEVIDO AO TAMANHO]"
+        if len(raw_diff) > self.max_diff_length:
+            logger.warning(f"Diff truncado de {len(raw_diff)} para {self.max_diff_length} caracteres")
+            return raw_diff[: self.max_diff_length] + "\n\n... [DIFF TRUNCADO DEVIDO AO TAMANHO]"
+        logger.debug(f"Diff processado com {len(raw_diff)} caracteres")
         return raw_diff
 
     def build_prompt(self, commit_message: str, diff: str, commit_summaries: list[str] = None) -> str:
@@ -95,7 +101,17 @@ Mensagem Principal: {commit_message}
         """
         cleaned_diff = self.clean_diff(raw_diff)
         prompt = self.build_prompt(commit_message, cleaned_diff, commit_summaries)
-        
-        print("Enviando dados para a nuvem do Groq processar em ultra velocidade...")
+
+        is_multiple = commit_summaries and len(commit_summaries) > 1
+        commit_info = f"{len(commit_summaries)} commits" if is_multiple else "commit único"
+        logger.info(f"Processando relatório para {commit_info}")
+
+        logger.info("Enviando dados para a nuvem do Groq processar...")
         report = self.ai.generate_report(prompt)
+
+        if report and not report.startswith("Erro"):
+            logger.info(f"Relatório gerado com sucesso ({len(report)} caracteres)")
+        else:
+            logger.error(f"Falha ao gerar relatório: {report}")
+
         return report
