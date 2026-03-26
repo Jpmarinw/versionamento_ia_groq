@@ -12,3 +12,8 @@ wheels/
 reports/
 __pycache__/
 
+# Logs
+*.log
+
+# Arquivos de texto
+*.txt

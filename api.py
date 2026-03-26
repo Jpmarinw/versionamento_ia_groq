@@ -87,30 +87,21 @@ async def startup_event():
 
 # --- ROTAS DA INTERFACE UI ---
 
-@app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request):
+def get_recent_reports_data(limit: int = 10):
     """
-    Dashboard principal: lista repositórios e os 10 relatórios mais recentes.
+    Função auxiliar para coletar os relatórios mais recentes de todos os repositórios.
     """
     reports_dir = "reports"
-    repos = []
-    recent_reports = []
+    all_files = []
     
     if os.path.exists(reports_dir):
-        # 1. Listamos as subpastas (repositórios)
-        repos = [d for d in os.listdir(reports_dir) if os.path.isdir(os.path.join(reports_dir, d))]
-        
-        # 2. Buscamos os 10 mais recentes em todas as pastas
-        all_files = []
         for root, dirs, files in os.walk(reports_dir):
             for f in files:
                 if f.endswith(".md"):
                     repo_folder = os.path.basename(root)
-                    # Extrai data amigável do nome do arquivo
                     parts = f.split("_")
                     if len(parts) >= 2:
                         d, t = parts[-2], parts[-1].replace(".md", "")
-                        # Criamos uma chave para ordenação (YYYYMMDD_HHMMSS)
                         sort_key = f"{d}_{t}"
                         date_display = f"{d[6:8]}/{d[4:6]}/{d[0:4]} {t[0:2]}:{t[2:4]}"
                         
@@ -122,9 +113,20 @@ async def dashboard(request: Request):
                             "sort_key": sort_key
                         })
         
-        # Ordena pelo sort_key descendente e pega os 10 primeiros
         all_files.sort(key=lambda x: x["sort_key"], reverse=True)
-        recent_reports = all_files[:10]
+    return all_files[:limit]
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """
+    Dashboard principal: lista repositórios e os 10 relatórios mais recentes.
+    """
+    reports_dir = "reports"
+    repos = []
+    if os.path.exists(reports_dir):
+        repos = [d for d in os.listdir(reports_dir) if os.path.isdir(os.path.join(reports_dir, d))]
+    
+    recent_reports = get_recent_reports_data(10)
     
     return templates.TemplateResponse(
         request=request, 
@@ -134,6 +136,13 @@ async def dashboard(request: Request):
             "recent_reports": recent_reports
         }
     )
+
+@app.get("/api/recent-updates")
+async def recent_updates():
+    """
+    Endpoint JSON para polling da interface (Live Update).
+    """
+    return get_recent_reports_data(10)
 
 @app.get("/repo/{repo_name}", response_class=HTMLResponse)
 async def repo_list(request: Request, repo_name: str):
