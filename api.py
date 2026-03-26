@@ -192,7 +192,7 @@ async def view_report(request: Request, repo_name: str, filename: str):
         md_content = f.read()
     
     # Converte Markdown para HTML com extensões para tabelas, blocos de código e quebras de linha
-    html_content = markdown.markdown(md_content, extensions=['fenced_code', 'tables', 'nl2br'])
+    html_content = markdown.markdown(md_content, extensions=['fenced_code', 'tables', 'nl2br', 'md_in_html'])
     
     return templates.TemplateResponse(
         request=request, name="report.html", context={
@@ -230,8 +230,8 @@ def process_webhook_event(sha: str, message: str, author: str, date: str, owner:
         # Gera o relatório (passando os resumos se houver múltiplos commits)
         report = processor.process_and_report(message, diff, commit_summaries)
         
-        # Salva o relatório
-        save_report(sha, report, author, date, ai.model_name, repo_name=repo, branch_name=branch_name, owner=owner)
+        # Salva o relatório (incluindo o diff raw para visualização elegante)
+        save_report(sha, report, author, date, ai.model_name, repo_name=repo, branch_name=branch_name, owner=owner, diff=diff)
         print(f"Relatório gerado com sucesso!")
         
     except Exception as e:

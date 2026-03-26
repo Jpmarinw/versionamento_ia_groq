@@ -218,3 +218,57 @@ body {
     font-style: italic;
     margin: 1.5rem 0;
 }
+
+/* Elegant Diff & Details Styles (GitHub-like) */
+details {
+    margin: 1.5rem 0;
+    padding: 1rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+details:hover {
+    border-color: var(--primary);
+}
+
+summary {
+    font-weight: 600;
+    color: var(--primary);
+    outline: none;
+    user-select: none;
+}
+
+.report-content code.language-diff {
+    display: block;
+    padding: 1rem !important;
+    background: #0d1117 !important; /* Always dark for diffs */
+    color: #c9d1d9 !important;
+    border-radius: 6px;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    overflow-x: auto;
+}
+
+.diff-line {
+    display: block;
+    white-space: pre;
+    padding-left: 0.5rem;
+}
+
+.diff-add { 
+    background-color: rgba(46, 160, 67, 0.15) !important; 
+    color: #3fb950 !important; 
+}
+.diff-remove { 
+    background-color: rgba(248, 81, 73, 0.15) !important; 
+    color: #f85149 !important; 
+}
+.diff-header {
+    color: #8b949e;
+    font-weight: bold;
+    background: rgba(110, 118, 129, 0.1);
+}

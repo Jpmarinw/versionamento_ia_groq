@@ -70,12 +70,59 @@ def main():
         report = processor.process_and_report(message, diff, commit_summaries)
         
         # Salva o relatório num arquivo .md dentro da pasta reports
-        save_report(sha, report, author, date, ai.model_name, repo_name=os.getenv("GITEA_REPO", "repo"))
+        save_report(sha, report, author, date, ai.model_name, repo_name=os.getenv("GITEA_REPO", "repo"), diff=diff)
 
     except Exception as e:
         print(f"Ocorreu um erro na execução: {e}")
 
-def save_report(sha: str, report: str, author: str, date_str: str, model_name: str, repo_name: str = "repo", branch_name: str = "main", owner: str = None):
+def simplify_diff(diff_text: str) -> str:
+    """
+    Remove as linhas de contexto (que começam com espaço) para tornar o diff mais curto e focado.
+    """
+    if not diff_text:
+        return ""
+    lines = diff_text.splitlines()
+    # Mantém apenas metadados do diff, cabeçalhos de chunk e as linhas alteradas (+/-)
+    simplified = [l for l in lines if l.startswith(('+', '-', '@@', 'diff', '---', '+++', 'index'))]
+    
+    # Se ainda estiver muito grande (ex: mais de 1000 linhas), corta para não quebrar a UI
+    if len(simplified) > 1000:
+        simplified = simplified[:1000] + ["\n[... Diff truncado por ser muito longo ...]"]
+        
+    return "\n".join(simplified)
+
+def split_diff_by_file(diff_text: str):
+    """
+    Divide um diff gigante em blocos separados por arquivo.
+    """
+    if not diff_text:
+        return []
+    
+    # Regex para capturar o nome do arquivo no cabeçalho do diff
+    import re
+    # Procura por "diff --git a/CAMINHO b/CAMINHO"
+    file_chunks = re.split(r'^diff --git ', diff_text, flags=re.M)
+    
+    blocks = []
+    for chunk in file_chunks:
+        if not chunk.strip():
+            continue
+        
+        # Reconstrói a linha de cabeçalho
+        full_chunk = "diff --git " + chunk
+        
+        # Tenta extrair o nome do arquivo (b/...)
+        filename_match = re.search(r'b/(.+?)\s', full_chunk)
+        filename = filename_match.group(1) if filename_match else "Arquivo Desconhecido"
+        
+        blocks.append({
+            "filename": filename,
+            "content": simplify_diff(full_chunk)
+        })
+        
+    return blocks
+
+def save_report(sha: str, report: str, author: str, date_str: str, model_name: str, repo_name: str = "repo", branch_name: str = "main", owner: str = None, diff: str = None):
     author_sanitized = author.lower().replace(" ", "_").replace("-", "_")
     repo_sanitized = repo_name.lower().replace(" ", "_").replace("-", "_")
     
@@ -109,6 +156,15 @@ def save_report(sha: str, report: str, author: str, date_str: str, model_name: s
         file.write(f"**Data do Commit:** {formatted_date}  \n\n")
         file.write("---\n\n")
         file.write(report)
+        
+        if diff:
+            diff_blocks = split_diff_by_file(diff)
+            file.write("\n\n---\n")
+            file.write(f"### 📝 Alterações no Código ({len(diff_blocks)} arquivos)\n")
+            
+            for block in diff_blocks:
+                file.write(f"\n#### 📄 {block['filename']}\n")
+                file.write(f"```diff\n{block['content']}\n```\n")
         
     # Salva/Atualiza o metadata.json para sincronização futura (Catch-up)
     if owner:
