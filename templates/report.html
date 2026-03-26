@@ -2,76 +2,7 @@
 
 {% block title %}Relatório - {{ filename }}{% endblock %}
 
-{% block extra_css %}
-<style>
-  /* Estilos para o Markdown renderizado */
-  .report-content {
-    background: #fff;
-    padding: 3rem;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-  }
-  .report-content h1 {
-    font-size: 2.25rem;
-    margin-bottom: 2rem;
-    color: #1e293b;
-    border-bottom: 2px solid var(--border);
-    padding-bottom: 1rem;
-  }
-  .report-content h2 {
-    font-size: 1.5rem;
-    margin-top: 2rem;
-    margin-bottom: 1rem;
-    color: #334155;
-  }
-  .report-content p {
-    margin-bottom: 1.25rem;
-    font-size: 1.125rem;
-    color: #475569;
-  }
-  .report-content ul {
-    margin-left: 1.5rem;
-    margin-bottom: 1.25rem;
-  }
-  .report-content li {
-    margin-bottom: 0.5rem;
-  }
-  .report-content code {
-    background: #f1f5f9;
-    padding: 0.2rem 0.4rem;
-    border-radius: 4px;
-    font-family: monospace;
-    font-size: 0.9em;
-  }
-  .report-content pre {
-    background: #1e293b;
-    color: #f8fafc;
-    padding: 1.5rem;
-    border-radius: 8px;
-    overflow-x: auto;
-    margin: 1.5rem 0;
-  }
-  .report-content pre code {
-    background: transparent;
-    padding: 0;
-    color: inherit;
-  }
-  .report-content hr {
-    margin: 2.5rem 0;
-    border: 0;
-    border-top: 1px solid var(--border);
-  }
-  .report-content blockquote {
-    border-left: 4px solid var(--primary);
-    padding-left: 1.5rem;
-    color: var(--text-muted);
-    font-style: italic;
-    margin: 1.5rem 0;
-  }
-</style>
-{% endblock %}
- {% block content %}
+{% block content %}
 <div class="breadcrumb">
   <a href="/">Dashboard</a> /
   <a href="/repo/{{ repo_name }}">{{ repo_name }}</a> / <span>Relatório</span>

@@ -15,8 +15,75 @@ load_dotenv()
 
 app = FastAPI(title="AI Commit Reporter API", description="Dashboard e Webhook para relatórios de IA.")
 
-# Configuração de Templates
+# Configuração de Templates e Estáticos
 templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+async def sync_missing_reports():
+    """
+    Busca commits realizados enquanto a API estava offline e gera os relatórios faltantes.
+    """
+    import json
+    reports_dir = "reports"
+    if not os.path.exists(reports_dir):
+        return
+
+    print("\n--- INICIANDO VERIFICAÇÃO DE COMMITS FALTANTES (CATCH-UP) ---")
+    
+    for folder in os.listdir(reports_dir):
+        repo_path = os.path.join(reports_dir, folder)
+        if not os.path.isdir(repo_path):
+            continue
+            
+        metadata_path = os.path.join(repo_path, "metadata.json")
+        if not os.path.exists(metadata_path):
+            continue
+            
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            
+            owner = meta.get("owner")
+            repo_name = meta.get("repo_name")
+            last_sync = meta.get("last_sync_iso")
+            last_sha = meta.get("last_sha")
+            
+            if not all([owner, repo_name, last_sync]):
+                continue
+                
+            print(f"Verificando {owner}/{repo_name} desde {last_sync}...")
+            git = GiteaProvider(user=owner, repo=repo_name)
+            missing_commits = git.get_commits_since(last_sync)
+            
+            # Filtramos o commit que já temos (pois o 'since' do Gitea é inclusivo)
+            new_commits = [c for c in missing_commits if c["sha"] != last_sha]
+            
+            if not new_commits:
+                print(f"✓ {repo_name} está atualizado.")
+                continue
+                
+            print(f"⚠ Encontrados {len(new_commits)} commits novos para {repo_name}. Processando...")
+            
+            # Processamos cada commit novo (do mais antigo para o mais novo)
+            for c in reversed(new_commits):
+                sha = c["sha"]
+                msg = c["commit"]["message"]
+                author = c["commit"]["author"]["name"]
+                date = c["commit"]["author"]["date"]
+                
+                # Executamos o processamento (chamada direta, pois estamos no startup)
+                process_webhook_event(sha, msg, author, date, owner, repo_name, branch_name="main")
+                
+        except Exception as e:
+            print(f"Erro ao sincronizar repo {folder}: {e}")
+
+    print("--- SINCRONIZAÇÃO CONCLUÍDA ---\n")
+
+@app.on_event("startup")
+async def startup_event():
+    # Executa a sincronização em segundo plano para não travar o início da API
+    import asyncio
+    asyncio.create_task(sync_missing_reports())
 
 # --- ROTAS DA INTERFACE UI ---
 
@@ -155,7 +222,7 @@ def process_webhook_event(sha: str, message: str, author: str, date: str, owner:
         report = processor.process_and_report(message, diff, commit_summaries)
         
         # Salva o relatório
-        save_report(sha, report, author, date, ai.model_name, repo_name=repo, branch_name=branch_name)
+        save_report(sha, report, author, date, ai.model_name, repo_name=repo, branch_name=branch_name, owner=owner)
         print(f"Relatório gerado com sucesso!")
         
     except Exception as e:

@@ -75,7 +75,7 @@ def main():
     except Exception as e:
         print(f"Ocorreu um erro na execução: {e}")
 
-def save_report(sha: str, report: str, author: str, date_str: str, model_name: str, repo_name: str = "repo", branch_name: str = "main"):
+def save_report(sha: str, report: str, author: str, date_str: str, model_name: str, repo_name: str = "repo", branch_name: str = "main", owner: str = None):
     author_sanitized = author.lower().replace(" ", "_").replace("-", "_")
     repo_sanitized = repo_name.lower().replace(" ", "_").replace("-", "_")
     
@@ -91,13 +91,16 @@ def save_report(sha: str, report: str, author: str, date_str: str, model_name: s
         tz_offset = int(os.getenv("TIMEZONE_OFFSET", "-4")) # Fuso de Manaus por padrão
         dt_local = dt_utc + datetime.timedelta(hours=tz_offset)
         formatted_date = dt_local.strftime("%d/%m/%Y - %H:%M")
+        date_iso = dt_utc.isoformat()
     except Exception:
-        # Fallback caso ocorra qualquer erro no parse (como o date value out of range)
+        # Fallback caso ocorra qualquer erro no parse
         formatted_date = date_str
+        date_iso = date_str
         
     data_atual = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     file_name = os.path.join(repo_path, f"commit_{repo_sanitized}_{author_sanitized}_{data_atual}.md")
     
+    # Salva o relatório Markdown
     with open(file_name, "w", encoding="utf-8") as file:
         file.write(f"# Relatório de Análise Automática - {sha[:7]}\n\n")
         file.write(f"**Repositório:** {repo_name}  \n")
@@ -106,6 +109,19 @@ def save_report(sha: str, report: str, author: str, date_str: str, model_name: s
         file.write(f"**Data do Commit:** {formatted_date}  \n\n")
         file.write("---\n\n")
         file.write(report)
+        
+    # Salva/Atualiza o metadata.json para sincronização futura (Catch-up)
+    if owner:
+        import json
+        metadata_path = os.path.join(repo_path, "metadata.json")
+        metadata = {
+            "owner": owner,
+            "repo_name": repo_name,
+            "last_sync_iso": date_iso,
+            "last_sha": sha
+        }
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=4)
         
     print(f"\n[SUCESSO] Relatório Groq gerado com sucesso!\nCaminho: {file_name}")
 

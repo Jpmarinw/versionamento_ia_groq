@@ -38,6 +38,21 @@ class GiteaProvider:
         response.raise_for_status()
         return response
 
+    def get_commits_since(self, since_iso: str) -> list[Dict[str, Any]]:
+        """
+        Busca todos os commits realizados no repositório desde uma determinada data.
+        
+        Args:
+            since_iso (str): Data em formato ISO 8601 (Ex: 2026-03-25T10:00:00Z).
+            
+        Returns:
+            list: Lista de dicionários de commits do Gitea.
+        """
+        url = f"{self.base_url}/commits"
+        params = {"since": since_iso, "limit": 50}
+        response = self._make_request(url, params=params)
+        return response.json()
+
     def get_latest_commit(self) -> Dict[str, Any]:
         """
         Obtém os detalhes completos do último commit no repositório.

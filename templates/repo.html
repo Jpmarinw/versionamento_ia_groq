@@ -1,11 +1,13 @@
-{% extends "base.html" %} {% block title %}Relatórios - {{ repo_name }}{%
-endblock %} {% block content %}
+{% extends "base.html" %}
+{% block title %}Relatórios - {{ repo_name }}{% endblock %}
+
+{% block content %}
 <div class="breadcrumb">
   <a href="/">Dashboard</a> / <span>{{ repo_name }}</span>
 </div>
 
 <header style="margin-bottom: 2rem">
-  <h1 style="font-size: 2rem; text-transform: capitalize">
+  <h1 style="font-size: 2rem; text-transform: capitalize; color: var(--text-main);">
     {{ repo_name.replace('_', ' ').replace('-', ' ') }}
   </h1>
   <p style="color: var(--text-muted)">
@@ -13,56 +15,24 @@ endblock %} {% block content %}
   </p>
 </header>
 
-<div
-  style="
-    background: #fff;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    overflow: hidden;
-  "
->
+<div class="report-table-container">
   <table style="width: 100%; border-collapse: collapse; text-align: left">
-    <thead style="background: #f1f5f9">
+    <thead class="report-table-thead">
       <tr>
-        <th
-          style="
-            padding: 1rem 1.5rem;
-            font-size: 0.875rem;
-            color: var(--text-muted);
-            font-weight: 600;
-          "
-        >
+        <th style="padding: 1rem 1.5rem; font-size: 0.875rem; color: var(--text-muted); font-weight: 600;">
           Relatório
         </th>
-        <th
-          style="
-            padding: 1rem 1.5rem;
-            font-size: 0.875rem;
-            color: var(--text-muted);
-            font-weight: 600;
-          "
-        >
+        <th style="padding: 1rem 1.5rem; font-size: 0.875rem; color: var(--text-muted); font-weight: 600;">
           Data
         </th>
-        <th
-          style="
-            padding: 1rem 1.5rem;
-            font-size: 0.875rem;
-            color: var(--text-muted);
-            font-weight: 600;
-          "
-        >
+        <th style="padding: 1rem 1.5rem; font-size: 0.875rem; color: var(--text-muted); font-weight: 600;">
           Ação
         </th>
       </tr>
     </thead>
     <tbody>
       {% for report in reports %}
-      <tr
-        style="border-top: 1px solid var(--border); transition: background 0.2s"
-        onmouseover="this.style.background = '#f8fafc'"
-        onmouseout="this.style.background = 'transparent'"
-      >
+      <tr class="report-tr">
         <td style="padding: 1rem 1.5rem">
           <div style="font-weight: 500">{{ report.name }}</div>
         </td>
