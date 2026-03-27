@@ -1,5 +1,12 @@
 import os
 import datetime
+import logging
+import sys
+from core.logger import setup_logging
+
+# Configuração de Logging Estruturado (Centralizada)
+setup_logging()
+logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
 
 from core.git_provider import GiteaProvider
@@ -70,7 +77,15 @@ def main():
         report = processor.process_and_report(message, diff, commit_summaries)
         
         # Salva o relatório num arquivo .md dentro da pasta reports
-        save_report(sha, report, author, date, ai.model_name, repo_name=os.getenv("GITEA_REPO", "repo"), diff=diff)
+        save_report(
+            repo_name=os.getenv("GITEA_REPO", "repo"),
+            author=author,
+            sha=sha,
+            date_str=date,
+            report=report,
+            owner=os.getenv("GITEA_ORG"),
+            diff=diff
+        )
 
     except Exception as e:
         print(f"Ocorreu um erro na execução: {e}")
@@ -122,15 +137,23 @@ def split_diff_by_file(diff_text: str):
         
     return blocks
 
-def save_report(sha: str, report: str, author: str, date_str: str, model_name: str, repo_name: str = "repo", branch_name: str = "main", owner: str = None, diff: str = None):
+def save_report(repo_name: str, author: str, sha: str, date_str: str, report: str, branch_name: str = "main", owner: str = None, diff: str = None):
+    """
+    Salva o relatório Markdown e os metadados para sincronização futura.
+    repo_name deve ser o nome original do repositório (ex: sfcs-gerencial).
+    """
     author_sanitized = author.lower().replace(" ", "_").replace("-", "_")
-    repo_sanitized = repo_name.lower().replace(" ", "_").replace("-", "_")
+    # Sanitiza apenas para o caminho da pasta
+    repo_sanitized = repo_name.lower().replace(" ", "_").replace("-", "_").replace("/", "_")
     
     # Cria a estrutura de pastas reports/[repositorio]
     repo_path = os.path.join("reports", repo_sanitized)
     if not os.path.exists(repo_path):
         os.makedirs(repo_path, exist_ok=True)
         
+    # Inicializa com valor padrão caso o parser falhe
+    dt_local = datetime.datetime.now()
+    
     try:
         from dateutil import parser
         # O parser do dateutil consegue interpretar quase qualquer formato ISO 8601 (com ou sem Z, offset, etc)
@@ -143,6 +166,7 @@ def save_report(sha: str, report: str, author: str, date_str: str, model_name: s
         # Fallback caso ocorra qualquer erro no parse
         formatted_date = date_str
         date_iso = date_str
+        # dt_local permanece como o valor padrão inicializado acima
         
     # Usamos a data do commit para o nome do arquivo (melhor para ordenação e identificação)
     data_commit = dt_local.strftime("%Y%m%d_%H%M%S")
@@ -153,7 +177,7 @@ def save_report(sha: str, report: str, author: str, date_str: str, model_name: s
     import glob
     existing_files = glob.glob(os.path.join(repo_path, f"*_{sha_short}.md"))
     if existing_files:
-        print(f"[INFO] Relatório para o commit {sha_short} já existe. Pulando...")
+        logger.info(f"[INFO] Relatório para o commit {sha_short} já existe. Pulando...")
         return
     
     # Salva o relatório Markdown

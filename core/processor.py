@@ -1,3 +1,8 @@
+import os
+import logging
+
+logger = logging.getLogger(__name__)
+
 class CommitProcessor:
     """
     Processador dos dados extraídos do Git (GitHub/Gitea) para criar o Super Prompt e
@@ -5,13 +10,12 @@ class CommitProcessor:
     """
     
     def __init__(self, ai_engine):
-        self.ai = ai_engine
+        self.ai_engine = ai_engine
 
     def clean_diff(self, raw_diff: str) -> str:
         """
         Limita o tamanho do diff para não extrapolar a janela de contexto.
         """
-        import os
         max_length = int(os.getenv("MAX_DIFF_LENGTH", 4000))
         
         if len(raw_diff) > max_length:
@@ -95,7 +99,8 @@ Mensagem Principal: {commit_message}
         """
         cleaned_diff = self.clean_diff(raw_diff)
         prompt = self.build_prompt(commit_message, cleaned_diff, commit_summaries)
+        # Envia para a IA
+        logger.info("Enviando dados para a nuvem do Groq processar em ultra velocidade...")
+        report = self.ai_engine.generate_report(prompt)
         
-        print("Enviando dados para a nuvem do Groq processar em ultra velocidade...")
-        report = self.ai.generate_report(prompt)
         return report

@@ -11,9 +11,42 @@ from main import save_report
 import sys
 import markdown
 import asyncio
+import logging
+from core.logger import setup_logging
+
+# Configuração de Logging Estruturado (Centralizada)
+setup_logging()
+logger = logging.getLogger(__name__)
+
+import hmac
+import hashlib
+
+def verify_webhook_signature(payload: bytes, signature: str, secret: str) -> bool:
+    """Verifica a assinatura HMAC do webhook do Gitea."""
+    try:
+        if not secret:
+            return True # Se não houver secret configurado, aceitamos (legado)
+            
+        expected_signature = hmac.new(
+            secret.encode(),
+            payload,
+            hashlib.sha256
+        ).hexdigest()
+        is_valid = hmac.compare_digest(expected_signature, signature)
+        if not is_valid:
+            logger.warning("Assinatura do webhook inválida")
+        return is_valid
+    except Exception as e:
+        logger.error(f"Erro ao verificar assinatura: {e}")
+        return False
 
 # Carrega as variáveis do arquivo .env
 load_dotenv()
+
+import socket
+
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
+HOSTNAME = os.getenv("HOSTNAME", socket.gethostname())
 
 app = FastAPI(title="AI Commit Reporter API", description="Dashboard e Webhook para relatórios de IA.")
 
@@ -28,7 +61,7 @@ async def sync_missing_reports():
     """
     global _IS_SYNCING
     if _IS_SYNCING:
-        print("[!] Sincronização já em entrando. Pulando tarefa duplicada.")
+        logger.warning("[!] Sincronização já em andamento. Pulando tarefa duplicada.")
         return
     _IS_SYNCING = True
     
@@ -38,7 +71,7 @@ async def sync_missing_reports():
         if not os.path.exists(reports_dir):
             return
 
-        print("\n--- INICIANDO VERIFICAÇÃO DE COMMITS FALTANTES (CATCH-UP) ---", flush=True)
+        logger.info("--- INICIANDO VERIFICAÇÃO DE COMMITS FALTANTES (CATCH-UP) ---")
         
         for folder in os.listdir(reports_dir):
             repo_path = os.path.join(reports_dir, folder)
@@ -66,30 +99,47 @@ async def sync_missing_reports():
                     import dateutil.parser
                     import datetime
                     last_dt = dateutil.parser.isoparse(last_sync)
-                    
-                    # Limite de catch-up (padrão 24h se o metadata for muito antigo)
-                    max_hours = int(os.getenv("MAX_CATCHUP_HOURS", "24"))
+
+                    # Limite de catch-up (padrão 72h = 3 dias para evitar perder commits durante períodos longos offline)
+                    max_hours = int(os.getenv("MAX_CATCHUP_HOURS", "72"))
                     cutoff_dt = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=max_hours)
-                    
+
+                    # Usa a data do último sync como base, mas respeita o limite máximo de catch-up
+                    # Se o último sync foi há mais de max_hours, começamos do cutoff_dt para não sobrecarregar a API
                     since_dt = max(last_dt + datetime.timedelta(seconds=1), cutoff_dt)
+                    
+                    # Log para debug: mostra se o cutoff está sendo aplicado
+                    if since_dt == cutoff_dt:
+                        logger.warning(f"[ALERTA] Repositorio {repo_name} esta com metadata antigo ({last_dt.date()}). Catch-up limitado a {max_hours}h para evitar sobrecarga.")
+                    
                     # Gitea prefere o formato ISO sem offset se for UTC (Z)
                     since_str = since_dt.astimezone(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-                except:
+                except Exception as e:
+                    logger.error(f"Erro ao parsear data de sync ({last_sync}): {e}")
                     since_str = last_sync
 
-                print(f"Verificando {owner}/{repo_name} desde {since_str}...", flush=True)
+                logger.info(f"Verificando {owner}/{repo_name} desde {since_str}...")
                 git = GiteaProvider(user=owner, repo=repo_name)
                 # Chama o método síncrono em uma thread para não travar o loop
                 missing_commits = await asyncio.to_thread(git.get_commits_since, since_str)
                 
-                # Não precisamos mais do filtro manual por last_sha, pois o +1s resolve
-                new_commits = missing_commits
+                # FILTRO MANUAL: A API do Gitea as vezes nao respeita corretamente o parametro since
+                # Filtramos manualmente para garantir que apenas commits apos since_dt sejam processados
+                since_dt_parsed = dateutil.parser.isoparse(since_str)
+                new_commits = []
+                for c in missing_commits:
+                    commit_date = dateutil.parser.isoparse(c["commit"]["author"]["date"])
+                    if commit_date > since_dt_parsed:
+                        new_commits.append(c)
                 
+                if len(missing_commits) != len(new_commits):
+                    logger.info(f"[FILTRO] {len(missing_commits)} commits retornados pelo Gitea, {len(new_commits)} apos o filtro manual.")
+
                 if not new_commits:
-                    print(f"[OK] {repo_name} está atualizado.", flush=True)
+                    logger.info(f"[OK] {repo_name} está atualizado.")
                     continue
                     
-                print(f"[!] Encontrados {len(new_commits)} commits novos para {repo_name}. Processando...", flush=True)
+                logger.info(f"[!] Encontrados {len(new_commits)} commits novos para {repo_name}. Processando...")
                 
                 # Processamos cada commit novo (do mais antigo para o mais novo)
                 for c in reversed(new_commits):
@@ -101,20 +151,20 @@ async def sync_missing_reports():
                     # Executamos o processamento (chamada direta, pois estamos no startup)
                     success = await process_webhook_event(sha, msg, author, date, owner, repo_name, branch_name="main")
                     if not success:
-                        print(f"[!] Sincronização interrompida para {repo_name} devido a erro ou limite de cota.")
+                        logger.error(f"[!] Sincronização interrompida para {repo_name} devido a erro ou limite de cota.")
                         break
                     
             except Exception as e:
-                print(f"Erro ao sincronizar repo {folder}: {e}")
+                logger.error(f"Erro ao sincronizar repo {folder}: {e}")
 
-        print("--- SINCRONIZAÇÃO CONCLUÍDA ---\n", flush=True)
+        logger.info("--- SINCRONIZAÇÃO CONCLUÍDA ---\n")
     finally:
         _IS_SYNCING = False
 
 @app.on_event("startup")
 async def startup_event():
     # Executa a sincronização em segundo plano para não travar o início da API
-    print("[INFO] Iniciando tarefa de sincronização em segundo plano...", flush=True)
+    logger.info("[INFO] Iniciando tarefa de sincronização em segundo plano...")
     asyncio.create_task(sync_missing_reports())
 
 # --- ROTAS DA INTERFACE UI ---
@@ -183,7 +233,8 @@ async def dashboard(request: Request):
         name="index.html", 
         context={
             "repos": sorted(repos),
-            "recent_reports": recent_reports
+            "recent_reports": recent_reports,
+            "hostname": HOSTNAME
         }
     )
 
@@ -244,7 +295,8 @@ async def repo_list(request: Request, repo_name: str):
     return templates.TemplateResponse(
         request=request, name="repo.html", context={
             "repo_name": repo_name, 
-            "reports": files
+            "reports": files,
+            "hostname": HOSTNAME
         }
     )
 
@@ -286,10 +338,10 @@ async def process_webhook_event(sha: str, message: str, author: str, date: str, 
         repo_path = os.path.join("reports", repo_sanitized)
         if os.path.exists(repo_path):
             if glob.glob(os.path.join(repo_path, f"*_{sha[:7]}.md")):
-                print(f"[INFO] Commit {sha[:7]} já possui relatório em {repo_sanitized}. Pulando...")
+                logger.info(f"[INFO] Commit {sha[:7]} já possui relatório em {repo_sanitized}. Pulando...")
                 return
 
-        print(f"Processando {'PR' if is_pr else 'Push'} em [{branch_name}] {owner}/{repo_name}...")
+        logger.info(f"Processando {'PR' if is_pr else 'Push'} em [{branch_name}] {owner}/{repo_name}...")
         
         git = GiteaProvider(user=owner, repo=repo_name)
         if is_pr:
@@ -309,16 +361,26 @@ async def process_webhook_event(sha: str, message: str, author: str, date: str, 
         report = await asyncio.to_thread(processor.process_and_report, message, diff, commit_summaries)
         
         # Salva o relatório (incluindo o diff raw para visualização elegante)
-        save_report(sha, report, author, date, ai.model_name, repo_name=repo_sanitized, branch_name=branch_name, owner=owner, diff=diff)
+        # Usamos parâmetros nomeados para evitar confusão de ordem
+        save_report(
+            repo_name=repo_name, 
+            author=author, 
+            sha=sha, 
+            date_str=date, 
+            report=report, 
+            branch_name=branch_name, 
+            owner=owner, 
+            diff=diff
+        )
         
         if "rate_limit_exceeded" in report.lower() or "limite de tokens" in report.lower():
             return False
 
-        print(f"Relatório gerado com sucesso!")
+        logger.info(f"Relatório gerado com sucesso!")
         return True
         
     except Exception as e:
-        print(f"Erro ao processar webhook: {e}")
+        logger.error(f"Erro ao processar webhook: {e}")
         return False
 
 @app.post("/webhook")
@@ -326,11 +388,18 @@ async def gitea_webhook(request: Request, background_tasks: BackgroundTasks):
     """
     Endpoint para receber eventos de PUSH e PULL REQUEST do Gitea.
     """
+    # 1. Verificação de Assinatura (Segurança)
+    signature = request.headers.get("X-Gitea-Signature")
+    payload_bytes = await request.body()
+    
+    if WEBHOOK_SECRET and not verify_webhook_signature(payload_bytes, signature, WEBHOOK_SECRET):
+        raise HTTPException(status_code=403, detail="Assinatura inválida ou ausente")
+
     import json
-    payload = await request.json()
+    payload = json.loads(payload_bytes.decode('utf-8'))
     
     # Log para análise
-    print(f"\n--- WEBHOOK RECEBIDO: {request.headers.get('X-Gitea-Event')} ---")
+    logger.info(f"--- WEBHOOK RECEBIDO: {request.headers.get('X-Gitea-Event')} ---")
     
     repo_info = payload.get("repository", {})
     owner = repo_info.get("owner", {}).get("login") or repo_info.get("owner", {}).get("username")

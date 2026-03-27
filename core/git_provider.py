@@ -1,6 +1,11 @@
-import os
 import requests
+import os
+import json
+import logging
+import time
 from typing import Dict, Any, Tuple
+
+logger = logging.getLogger(__name__)
 
 class GiteaProvider:
     """
@@ -24,19 +29,44 @@ class GiteaProvider:
             "Accept": "application/json"
         }
 
-    def _make_request(self, url: str, headers: Dict[str, str] = None, params: Dict[str, Any] = None) -> requests.Response:
+    def _make_request(self, url: str, headers: Dict[str, str] = None, params: Dict[str, Any] = None, max_retries: int = 3) -> requests.Response:
         """
-        Realiza a requisição HTTP com tratamento de erros básico.
+        Realiza a requisição HTTP com tratamento de erro 429 (Rate Limit) e retry exponencial.
         """
-        response = requests.get(url, headers=headers or self.headers, params=params)
+        retry_count = 0
+        base_delay = 1.0 # segundos
         
-        if response.status_code == 403:
-            raise Exception("Erro de permissão (403). Verifique se o token tem acesso ao repositório.")
-        elif response.status_code == 401:
-            raise Exception("Erro de autenticação (401). Verifique o GITEA_TOKEN.")
-            
-        response.raise_for_status()
-        return response
+        while retry_count < max_retries:
+            try:
+                response = requests.get(url, headers=headers or self.headers, params=params, timeout=30)
+                
+                if response.status_code == 429:
+                    # Rate limiting - extrai Retry-After se disponível, senão usa exponencial
+                    retry_after = int(response.headers.get("Retry-After", base_delay * (2 ** retry_count)))
+                    logger.warning(f"Rate limiting (429) no Gitea. Aguardando {retry_after}s antes de tentar novamente ({retry_count + 1}/{max_retries})...")
+                    time.sleep(retry_after)
+                    retry_count += 1
+                    continue
+                
+                if response.status_code == 403:
+                    raise Exception("Erro de permissão (403). Verifique se o token tem acesso ao repositório.")
+                elif response.status_code == 401:
+                    raise Exception("Erro de autenticação (401). Verifique o GITEA_TOKEN.")
+                    
+                response.raise_for_status()
+                return response
+                
+            except (requests.RequestException, Exception) as e:
+                retry_count += 1
+                if retry_count >= max_retries:
+                    logger.error(f"Falha na requisição ao Gitea após {max_retries} tentativas: {e}")
+                    raise
+                
+                delay = base_delay * (2 ** (retry_count - 1))
+                logger.warning(f"Tentativa {retry_count} falhou ({e}). Novo retry em {delay}s...")
+                time.sleep(delay)
+        
+        raise Exception(f"Falha ao realizar requisição ao Gitea após {max_retries} tentativas.")
 
     def get_commits_since(self, since_iso: str) -> list[Dict[str, Any]]:
         """
