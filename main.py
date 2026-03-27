@@ -144,8 +144,17 @@ def save_report(sha: str, report: str, author: str, date_str: str, model_name: s
         formatted_date = date_str
         date_iso = date_str
         
-    data_atual = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    file_name = os.path.join(repo_path, f"commit_{repo_sanitized}_{author_sanitized}_{data_atual}.md")
+    # Usamos a data do commit para o nome do arquivo (melhor para ordenação e identificação)
+    data_commit = dt_local.strftime("%Y%m%d_%H%M%S")
+    sha_short = sha[:7]
+    file_name = os.path.join(repo_path, f"commit_{repo_sanitized}_{author_sanitized}_{data_commit}_{sha_short}.md")
+    
+    # Verifica se já existe um arquivo com este SHA neste repositório para evitar duplicatas
+    import glob
+    existing_files = glob.glob(os.path.join(repo_path, f"*_{sha_short}.md"))
+    if existing_files:
+        print(f"[INFO] Relatório para o commit {sha_short} já existe. Pulando...")
+        return
     
     # Salva o relatório Markdown
     with open(file_name, "w", encoding="utf-8") as file:

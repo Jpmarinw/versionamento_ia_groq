@@ -10,4 +10,5 @@ echo [START] Iniciando servidor em segundo plano...
 start "" "run_hidden.vbs"
 
 echo [OK] A API foi reiniciada e ja estara pronta em alguns segundos.
-timeout /t 3
+:: Substituindo timeout por ping para evitar erro de redirecionamento de entrada em terminais de IDE
+ping 127.0.0.1 -n 11 >nul

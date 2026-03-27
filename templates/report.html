@@ -1,8 +1,5 @@
-{% extends "base.html" %}
-
-{% block title %}Relatório - {{ filename }}{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% block title %}Relatório - {{ filename }}{% endblock
+%} {% block content %}
 <div class="breadcrumb">
   <a href="/">Dashboard</a> /
   <a href="/repo/{{ repo_name }}">{{ repo_name }}</a> / <span>Relatório</span>
@@ -19,27 +16,34 @@
 </div>
 
 <script>
-  document.addEventListener('DOMContentLoaded', () => {
-    const diffBlocks = document.querySelectorAll('code.language-diff');
-    
-    diffBlocks.forEach(block => {
+  document.addEventListener("DOMContentLoaded", () => {
+    const diffBlocks = document.querySelectorAll("code.language-diff");
+
+    diffBlocks.forEach((block) => {
       // 1. Envolver o bloco em um <details> se ainda não estiver
       const pre = block.parentElement;
-      if (pre && pre.tagName === 'PRE' && pre.parentElement.tagName !== 'DETAILS') {
-        const details = document.createElement('details');
-        const summary = document.createElement('summary');
-        
+      if (
+        pre &&
+        pre.tagName === "PRE" &&
+        pre.parentElement.tagName !== "DETAILS"
+      ) {
+        const details = document.createElement("details");
+        const summary = document.createElement("summary");
+
         // Tenta pegar o nome do arquivo do H4 anterior
-        let label = 'Ver alterações';
+        let label = "Ver alterações";
         const prevHeader = pre.previousElementSibling;
-        if (prevHeader && (prevHeader.tagName === 'H4' || prevHeader.tagName === 'H3')) {
+        if (
+          prevHeader &&
+          (prevHeader.tagName === "H4" || prevHeader.tagName === "H3")
+        ) {
           label = prevHeader.innerText;
-          prevHeader.style.display = 'none'; // Esconde o H4 original para não repetir
+          prevHeader.style.display = "none"; // Esconde o H4 original para não repetir
         }
-        
+
         summary.innerText = label;
-        summary.style.cursor = 'pointer';
-        
+        summary.style.cursor = "pointer";
+
         pre.parentNode.insertBefore(details, pre);
         details.appendChild(summary);
         details.appendChild(pre);
@@ -49,25 +53,31 @@
       const rawText = block.textContent; // Usar textContent para evitar problemas com tags HTML no diff
       if (!rawText) return;
 
-      const lines = rawText.split('\n');
+      const lines = rawText.split("\n");
       const fragment = document.createDocumentFragment();
 
-      lines.forEach(line => {
-        const span = document.createElement('span');
-        span.className = 'diff-line';
-        
-        if (line.startsWith('+')) span.classList.add('diff-add');
-        else if (line.startsWith('-')) span.classList.add('diff-remove');
-        else if (line.startsWith('@@') || line.startsWith('diff') || line.startsWith('index') || line.startsWith('---') || line.startsWith('+++')) {
-          span.classList.add('diff-header');
+      lines.forEach((line) => {
+        const span = document.createElement("span");
+        span.className = "diff-line";
+
+        if (line.startsWith("+")) span.classList.add("diff-add");
+        else if (line.startsWith("-")) span.classList.add("diff-remove");
+        else if (
+          line.startsWith("@@") ||
+          line.startsWith("diff") ||
+          line.startsWith("index") ||
+          line.startsWith("---") ||
+          line.startsWith("+++")
+        ) {
+          span.classList.add("diff-header");
         }
-        
+
         span.textContent = line; // Garante que < > etc sejam tratados como texto
         fragment.appendChild(span);
-        fragment.appendChild(document.createTextNode('\n'));
+        fragment.appendChild(document.createTextNode("\n"));
       });
 
-      block.innerHTML = '';
+      block.innerHTML = "";
       block.appendChild(fragment);
     });
   });

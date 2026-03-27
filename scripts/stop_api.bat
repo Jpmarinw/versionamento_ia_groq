@@ -1,11 +1,14 @@
 @echo off
 echo [CONTROLE] Procurando processo da API na porta 8000...
 
-:: Busca o PID do processo que esta usando a porta 8000
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8000') do (
-    echo [OK] Finalizando processo PID: %%a
-    taskkill /f /pid %%a /t
+:: Busca o PID do processo que esta ouvindo (LISTENING) na porta 8000
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr /R /C:":8000 " ^| findstr LISTENING') do (
+    if NOT "%%a"=="0" if NOT "%%a"=="4" (
+        echo [OK] Finalizando processo da API (PID: %%a)
+        taskkill /f /pid %%a /t >nul 2>&1
+    )
 )
 
 echo [INFO] API encerrada com sucesso.
-timeout /t 2
+:: Substituindo timeout por ping para evitar erro de redirecionamento de entrada em terminais de IDE
+ping 127.0.0.1 -n 3 >nul

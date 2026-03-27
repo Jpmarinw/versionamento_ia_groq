@@ -8,7 +8,9 @@ from core.git_provider import GiteaProvider
 from core.ai_engine import GroqEngine
 from core.processor import CommitProcessor
 from main import save_report
+import sys
 import markdown
+import asyncio
 
 # Carrega as variáveis do arquivo .env
 load_dotenv()
@@ -18,71 +20,101 @@ app = FastAPI(title="AI Commit Reporter API", description="Dashboard e Webhook p
 # Configuração de Templates e Estáticos
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
+_IS_SYNCING = False
 
 async def sync_missing_reports():
     """
     Busca commits realizados enquanto a API estava offline e gera os relatórios faltantes.
     """
-    import json
-    reports_dir = "reports"
-    if not os.path.exists(reports_dir):
+    global _IS_SYNCING
+    if _IS_SYNCING:
+        print("[!] Sincronização já em entrando. Pulando tarefa duplicada.")
         return
-
-    print("\n--- INICIANDO VERIFICAÇÃO DE COMMITS FALTANTES (CATCH-UP) ---")
+    _IS_SYNCING = True
     
-    for folder in os.listdir(reports_dir):
-        repo_path = os.path.join(reports_dir, folder)
-        if not os.path.isdir(repo_path):
-            continue
-            
-        metadata_path = os.path.join(repo_path, "metadata.json")
-        if not os.path.exists(metadata_path):
-            continue
-            
-        try:
-            with open(metadata_path, "r", encoding="utf-8") as f:
-                meta = json.load(f)
-            
-            owner = meta.get("owner")
-            repo_name = meta.get("repo_name")
-            last_sync = meta.get("last_sync_iso")
-            last_sha = meta.get("last_sha")
-            
-            if not all([owner, repo_name, last_sync]):
-                continue
-                
-            print(f"Verificando {owner}/{repo_name} desde {last_sync}...")
-            git = GiteaProvider(user=owner, repo=repo_name)
-            missing_commits = git.get_commits_since(last_sync)
-            
-            # Filtramos o commit que já temos (pois o 'since' do Gitea é inclusivo)
-            new_commits = [c for c in missing_commits if c["sha"] != last_sha]
-            
-            if not new_commits:
-                print(f"✓ {repo_name} está atualizado.")
-                continue
-                
-            print(f"⚠ Encontrados {len(new_commits)} commits novos para {repo_name}. Processando...")
-            
-            # Processamos cada commit novo (do mais antigo para o mais novo)
-            for c in reversed(new_commits):
-                sha = c["sha"]
-                msg = c["commit"]["message"]
-                author = c["commit"]["author"]["name"]
-                date = c["commit"]["author"]["date"]
-                
-                # Executamos o processamento (chamada direta, pois estamos no startup)
-                process_webhook_event(sha, msg, author, date, owner, repo_name, branch_name="main")
-                
-        except Exception as e:
-            print(f"Erro ao sincronizar repo {folder}: {e}")
+    try:
+        import json
+        reports_dir = "reports"
+        if not os.path.exists(reports_dir):
+            return
 
-    print("--- SINCRONIZAÇÃO CONCLUÍDA ---\n")
+        print("\n--- INICIANDO VERIFICAÇÃO DE COMMITS FALTANTES (CATCH-UP) ---", flush=True)
+        
+        for folder in os.listdir(reports_dir):
+            repo_path = os.path.join(reports_dir, folder)
+            if not os.path.isdir(repo_path):
+                continue
+                
+            metadata_path = os.path.join(repo_path, "metadata.json")
+            if not os.path.exists(metadata_path):
+                continue
+                
+            try:
+                with open(metadata_path, "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+                
+                owner = meta.get("owner")
+                repo_name = meta.get("repo_name")
+                last_sync = meta.get("last_sync_iso")
+                last_sha = meta.get("last_sha")
+                
+                if not all([owner, repo_name, last_sync]):
+                    continue
+                    
+                # Incrementamos 1 segundo na data de início para evitar pegar o mesmo commit (inclusivo)
+                try:
+                    import dateutil.parser
+                    import datetime
+                    last_dt = dateutil.parser.isoparse(last_sync)
+                    
+                    # Limite de catch-up (padrão 24h se o metadata for muito antigo)
+                    max_hours = int(os.getenv("MAX_CATCHUP_HOURS", "24"))
+                    cutoff_dt = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=max_hours)
+                    
+                    since_dt = max(last_dt + datetime.timedelta(seconds=1), cutoff_dt)
+                    # Gitea prefere o formato ISO sem offset se for UTC (Z)
+                    since_str = since_dt.astimezone(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+                except:
+                    since_str = last_sync
+
+                print(f"Verificando {owner}/{repo_name} desde {since_str}...", flush=True)
+                git = GiteaProvider(user=owner, repo=repo_name)
+                # Chama o método síncrono em uma thread para não travar o loop
+                missing_commits = await asyncio.to_thread(git.get_commits_since, since_str)
+                
+                # Não precisamos mais do filtro manual por last_sha, pois o +1s resolve
+                new_commits = missing_commits
+                
+                if not new_commits:
+                    print(f"[OK] {repo_name} está atualizado.", flush=True)
+                    continue
+                    
+                print(f"[!] Encontrados {len(new_commits)} commits novos para {repo_name}. Processando...", flush=True)
+                
+                # Processamos cada commit novo (do mais antigo para o mais novo)
+                for c in reversed(new_commits):
+                    sha = c["sha"]
+                    msg = c["commit"]["message"]
+                    author = c["commit"]["author"]["name"]
+                    date = c["commit"]["author"]["date"]
+                    
+                    # Executamos o processamento (chamada direta, pois estamos no startup)
+                    success = await process_webhook_event(sha, msg, author, date, owner, repo_name, branch_name="main")
+                    if not success:
+                        print(f"[!] Sincronização interrompida para {repo_name} devido a erro ou limite de cota.")
+                        break
+                    
+            except Exception as e:
+                print(f"Erro ao sincronizar repo {folder}: {e}")
+
+        print("--- SINCRONIZAÇÃO CONCLUÍDA ---\n", flush=True)
+    finally:
+        _IS_SYNCING = False
 
 @app.on_event("startup")
 async def startup_event():
     # Executa a sincronização em segundo plano para não travar o início da API
-    import asyncio
+    print("[INFO] Iniciando tarefa de sincronização em segundo plano...", flush=True)
     asyncio.create_task(sync_missing_reports())
 
 # --- ROTAS DA INTERFACE UI ---
@@ -99,19 +131,37 @@ def get_recent_reports_data(limit: int = 10):
             for f in files:
                 if f.endswith(".md"):
                     repo_folder = os.path.basename(root)
-                    parts = f.split("_")
-                    if len(parts) >= 2:
-                        d, t = parts[-2], parts[-1].replace(".md", "")
-                        sort_key = f"{d}_{t}"
-                        date_display = f"{d[6:8]}/{d[4:6]}/{d[0:4]} {t[0:2]}:{t[2:4]}"
+                    parts = f.replace(".md", "").split("_")
+                    if len(parts) >= 3:
+                        # Tenta identificar por padrão de tamanho fixo: DATA(8) HORA(6) ocorrendo sequencialmente
+                        date_idx = -1
+                        for i in range(len(parts) - 1):
+                            if len(parts[i]) == 8 and parts[i].isdigit() and len(parts[i+1]) == 6 and parts[i+1].isdigit():
+                                date_idx = i
+                                break
                         
-                        all_files.append({
-                            "repo": repo_folder,
-                            "filename": f,
-                            "name": f.replace(".md", "").replace("commit_", "").replace(repo_folder, "").strip("_"),
-                            "date": date_display,
-                            "sort_key": sort_key
-                        })
+                        if date_idx != -1:
+                            d, t = parts[date_idx], parts[date_idx + 1]
+                            # O que vem antes da data (depois de 'commit' e repo) é o autor
+                            # Formato: commit_repo_autor_DATA_HORA_SHA
+                            author_parts = parts[2:date_idx] if len(parts) > 2 else []
+                            author = " ".join(author_parts).title()
+                            
+                            # O que vem depois da hora é o SHA
+                            sha = parts[date_idx + 2] if len(parts) > date_idx + 2 else ""
+                            
+                            sort_key = f"{d}_{t}"
+                            date_display = f"{d[6:8]}/{d[4:6]}/{d[0:4]} {t[0:2]}:{t[2:4]}"
+                            
+                            display_name = f"{author} ({sha})" if author and sha else (author if author else (sha if sha else f"{d}_{t}"))
+                            
+                            all_files.append({
+                                "repo": repo_folder,
+                                "filename": f,
+                                "name": display_name,
+                                "date": date_display,
+                                "sort_key": sort_key
+                            })
         
         all_files.sort(key=lambda x: x["sort_key"], reverse=True)
     return all_files[:limit]
@@ -156,21 +206,40 @@ async def repo_list(request: Request, repo_name: str):
     files = []
     for f in os.listdir(repo_path):
         if f.endswith(".md"):
-            # Extrai uma data amigável do nome do arquivo (se possível)
-            timestamp = f.split("_")[-2:] # Pega data e hora
+            # Extrai uma data amigável do nome do arquivo
+            parts = f.replace(".md", "").split("_")
             date_display = "Recent"
-            if len(timestamp) == 2:
-                d, t = timestamp[0], timestamp[1].replace(".md", "")
-                date_display = f"{d[6:8]}/{d[4:6]}/{d[0:4]} {t[0:2]}:{t[2:4]}"
+            display_name = f
+            
+            if len(parts) >= 3:
+                date_idx = -1
+                for i in range(len(parts) - 1):
+                    if len(parts[i]) == 8 and parts[i].isdigit() and len(parts[i+1]) == 6 and parts[i+1].isdigit():
+                        date_idx = i
+                        break
+                
+                if date_idx != -1:
+                    d, t = parts[date_idx], parts[date_idx + 1]
+                    # Tenta pegar autor (partes entre repo e data)
+                    # Note: parts[0] é 'commit', parts[1] é repo... mas repo pode ter mais partes se sanitizado
+                    # Usamos um truque: o que sobrar entre o prefixo e a data é o autor
+                    author_parts = parts[2:date_idx]
+                    author = " ".join(author_parts).title()
+                    sha = parts[date_idx + 2] if len(parts) > date_idx + 2 else ""
+                    
+                    date_display = f"{d[6:8]}/{d[4:6]}/{d[0:4]} {t[0:2]}:{t[2:4]}"
+                    display_name = f"{author} ({sha})" if author and sha else (author if author else (sha if sha else f"{d}_{t}"))
+                    sort_key = f"{d}_{t}"
             
             files.append({
                 "filename": f,
-                "name": f.replace(".md", "").replace("commit_", "").replace(repo_name, "").strip("_"),
-                "date": date_display
+                "name": display_name,
+                "date": date_display,
+                "sort_key": sort_key
             })
             
-    # Ordena pelo mais recente (nome do arquivo começa com data)
-    files.sort(key=lambda x: x["filename"], reverse=True)
+    # Ordena pelo mais recente (usando a chave de data real calculada)
+    files.sort(key=lambda x: x.get("sort_key", ""), reverse=True)
     
     return templates.TemplateResponse(
         request=request, name="repo.html", context={
@@ -204,38 +273,53 @@ async def view_report(request: Request, repo_name: str, filename: str):
 
 # --- LÓGICA DO WEBHOOK (MANTIDA) ---
 
-def process_webhook_event(sha: str, message: str, author: str, date: str, owner: str, repo: str, is_pr: bool = False, commit_summaries: list[str] = None, diff_override: str = None, branch_name: str = "main"):
+async def process_webhook_event(sha: str, message: str, author: str, date: str, owner: str, repo_name: str, is_pr: bool = False, commit_summaries: list[str] = None, diff_override: str = None, branch_name: str = "main"):
     """
     Executa o fluxo de geração de relatório em segundo plano.
     """
     try:
-        print(f"Processando {'PR' if is_pr else 'Push'} em [{branch_name}] {owner}/{repo}...")
+        # Sanitiza para bater com a pasta do reports (igual ao main.py)
+        repo_sanitized = repo_name.lower().replace(" ", "_").replace("-", "_")
         
-        git = GiteaProvider(user=owner, repo=repo)
+        # Verifica se já existe um relatório para este SHA antes de processar (evita custo de IA)
+        import glob
+        repo_path = os.path.join("reports", repo_sanitized)
+        if os.path.exists(repo_path):
+            if glob.glob(os.path.join(repo_path, f"*_{sha[:7]}.md")):
+                print(f"[INFO] Commit {sha[:7]} já possui relatório em {repo_sanitized}. Pulando...")
+                return
+
+        print(f"Processando {'PR' if is_pr else 'Push'} em [{branch_name}] {owner}/{repo_name}...")
         
-        # Se for um PR, usamos o método de comparação/PR do provider
+        git = GiteaProvider(user=owner, repo=repo_name)
         if is_pr:
             # sha aqui é tratado como o index do PR
-            diff, commit_summaries = git.get_pull_request_info(sha)
+            diff, commit_summaries = await asyncio.to_thread(git.get_pull_request_info, sha)
         elif diff_override:
             # Usado para Push agrupado onde já calculamos o diff
             diff = diff_override
         else:
-            # Backup: busca diff de commit único
-            diff = git.get_commit_diff(sha)
+            # Backup: busca diff de commit único (em thread)
+            diff = await asyncio.to_thread(git.get_commit_diff, sha)
         
         ai = GroqEngine()
         processor = CommitProcessor(ai)
         
-        # Gera o relatório (passando os resumos se houver múltiplos commits)
-        report = processor.process_and_report(message, diff, commit_summaries)
+        # Gera o relatório (em thread)
+        report = await asyncio.to_thread(processor.process_and_report, message, diff, commit_summaries)
         
         # Salva o relatório (incluindo o diff raw para visualização elegante)
-        save_report(sha, report, author, date, ai.model_name, repo_name=repo, branch_name=branch_name, owner=owner, diff=diff)
+        save_report(sha, report, author, date, ai.model_name, repo_name=repo_sanitized, branch_name=branch_name, owner=owner, diff=diff)
+        
+        if "rate_limit_exceeded" in report.lower() or "limite de tokens" in report.lower():
+            return False
+
         print(f"Relatório gerado com sucesso!")
+        return True
         
     except Exception as e:
         print(f"Erro ao processar webhook: {e}")
+        return False
 
 @app.post("/webhook")
 async def gitea_webhook(request: Request, background_tasks: BackgroundTasks):
@@ -292,7 +376,7 @@ async def gitea_webhook(request: Request, background_tasks: BackgroundTasks):
             before = payload.get("before")
             after = payload.get("after")
             
-            git = GiteaProvider(user=owner, repo=repo)
+            git = GiteaProvider(user=owner, repo=repo_name)
             try:
                 if before and after and before != "0000000000000000000000000000000000000000":
                     diff, _ = git.get_compare_info(before, after)
