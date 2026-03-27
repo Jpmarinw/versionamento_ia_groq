@@ -10,6 +10,7 @@ from core.processor import CommitProcessor
 from main import save_report
 import markdown
 import logging
+import asyncio
 from core.logger import setup_logging
 
 # Configuração de Logging Estruturado (Centralizada)
