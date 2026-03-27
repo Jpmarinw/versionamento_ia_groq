@@ -196,23 +196,10 @@ def save_report(repo_name: str, author: str, sha: str, date_str: str, report: st
             file.write(f"### 📝 Alterações no Código ({len(diff_blocks)} arquivos)\n")
             
             for block in diff_blocks:
-                file.write(f"\n#### 📄 {block['filename']}\n")
+                file.write(f"\n#### {block['filename']}\n")
                 file.write(f"```diff\n{block['content']}\n```\n")
-        
-    # Salva/Atualiza o metadata.json para sincronização futura (Catch-up)
-    if owner:
-        import json
-        metadata_path = os.path.join(repo_path, "metadata.json")
-        metadata = {
-            "owner": owner,
-            "repo_name": repo_name,
-            "last_sync_iso": date_iso,
-            "last_sha": sha
-        }
-        with open(metadata_path, "w", encoding="utf-8") as f:
-            json.dump(metadata, f, indent=4)
-        
-    print(f"\n[SUCESSO] Relatório Groq gerado com sucesso!\nCaminho: {file_name}")
+
+    print(f"\n[SUCESSO] Relatorio Groq gerado com sucesso!\nCaminho: {file_name}")
 
 if __name__ == "__main__":
     main()
