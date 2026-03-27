@@ -267,75 +267,81 @@ async def gitea_webhook(request: Request, background_tasks: BackgroundTasks):
     """
     Endpoint para receber eventos de PUSH e PULL REQUEST do Gitea.
     """
-    signature = request.headers.get("X-Gitea-Signature")
-    payload_bytes = await request.body()
+    try:
+        signature = request.headers.get("X-Gitea-Signature")
+        payload_bytes = await request.body()
 
-    if WEBHOOK_SECRET and not verify_webhook_signature(payload_bytes, signature, WEBHOOK_SECRET):
-        raise HTTPException(status_code=403, detail="Assinatura invalida ou ausente")
+        if WEBHOOK_SECRET and not verify_webhook_signature(payload_bytes, signature, WEBHOOK_SECRET):
+            raise HTTPException(status_code=403, detail="Assinatura invalida ou ausente")
 
-    import json
-    import asyncio
-    payload = json.loads(payload_bytes.decode('utf-8'))
+        import json
+        payload = json.loads(payload_bytes.decode('utf-8'))
 
-    logger.info(f"--- WEBHOOK RECEBIDO: {request.headers.get('X-Gitea-Event')} ---")
+        logger.info(f"--- WEBHOOK RECEBIDO: {request.headers.get('X-Gitea-Event')} ---")
 
-    repo_info = payload.get("repository", {})
-    owner = repo_info.get("owner", {}).get("login") or repo_info.get("owner", {}).get("username")
-    repo_name = repo_info.get("name")
+        repo_info = payload.get("repository", {})
+        owner = repo_info.get("owner", {}).get("login") or repo_info.get("owner", {}).get("username")
+        repo_name = repo_info.get("name")
 
-    if not owner or not repo_name:
-        return {"status": "ignored", "message": "Repositorio nao identificado."}
+        if not owner or not repo_name:
+            return {"status": "ignored", "message": "Repositorio nao identificado."}
 
-    # 1. TRATAMENTO DE PULL REQUEST
-    if "pull_request" in payload:
-        pr = payload["pull_request"]
-        pr_id = str(payload.get("index") or pr.get("number"))
-        title = pr.get("title")
-        author = pr.get("user", {}).get("full_name") or pr.get("user", {}).get("login")
-        date = pr.get("updated_at") or pr.get("created_at")
-        target_branch = pr.get("base", {}).get("ref") or "main"
+        # 1. TRATAMENTO DE PULL REQUEST
+        if "pull_request" in payload:
+            pr = payload["pull_request"]
+            pr_id = str(payload.get("index") or pr.get("number"))
+            title = pr.get("title")
+            author = pr.get("user", {}).get("full_name") or pr.get("user", {}).get("login")
+            date = pr.get("updated_at") or pr.get("created_at")
+            target_branch = pr.get("base", {}).get("ref") or "main"
 
-        background_tasks.add_task(process_webhook_event, pr_id, f"PR #{pr_id}: {title}", author, date, owner, repo_name, is_pr=True, branch_name=target_branch)
-        return {"status": "success", "message": f"Pull Request #{pr_id} enviado para analise."}
+            background_tasks.add_task(process_webhook_event, pr_id, f"PR #{pr_id}: {title}", author, date, owner, repo_name, is_pr=True, branch_name=target_branch)
+            return {"status": "success", "message": f"Pull Request #{pr_id} enviado para analise."}
 
-    # 2. TRATAMENTO DE PUSH (Agrupado)
-    elif "commits" in payload:
-        commits = payload["commits"]
-        if not commits:
-            return {"status": "ignored", "message": "Push sem commits."}
+        # 2. TRATAMENTO DE PUSH (Agrupado)
+        elif "commits" in payload:
+            commits = payload["commits"]
+            if not commits:
+                return {"status": "ignored", "message": "Push sem commits."}
 
-        ref = payload.get("ref", "refs/heads/main")
-        branch_name = ref.split("/")[-1]
+            ref = payload.get("ref", "refs/heads/main")
+            branch_name = ref.split("/")[-1]
 
-        pusher = payload.get("pusher", {})
-        author = pusher.get("full_name") or pusher.get("username") or commits[0]["author"]["name"]
-        date = commits[0]["timestamp"]
+            pusher = payload.get("pusher", {})
+            author = pusher.get("full_name") or pusher.get("username") or commits[0]["author"]["name"]
+            date = commits[0]["timestamp"]
 
-        if len(commits) == 1:
-            background_tasks.add_task(process_webhook_event, commits[0]["id"], commits[0]["message"], author, date, owner, repo_name, branch_name=branch_name)
-        else:
-            commit_summaries = [f"- {c['message']} ({c['id'][:7]})" for c in commits]
+            if len(commits) == 1:
+                background_tasks.add_task(process_webhook_event, commits[0]["id"], commits[0]["message"], author, date, owner, repo_name, branch_name=branch_name)
+            else:
+                commit_summaries = [f"- {c['message']} ({c['id'][:7]})" for c in commits]
 
-            before = payload.get("before")
-            after = payload.get("after")
+                before = payload.get("before")
+                after = payload.get("after")
 
-            git = GiteaProvider(user=owner, repo=repo_name)
-            try:
-                if before and after and before != "0000000000000000000000000000000000000000":
-                    diff, _ = git.get_compare_info(before, after)
-                else:
-                    diff = ""
-                    for c in commits:
-                        diff += f"\n--- Commit {c['id'][:7]} ---\n" + git.get_commit_diff(c["id"])
-            except:
-                diff = "Erro ao coletar diff agrupado."
+                git = GiteaProvider(user=owner, repo=repo_name)
+                try:
+                    if before and after and before != "0000000000000000000000000000000000000000":
+                        diff, _ = git.get_compare_info(before, after)
+                    else:
+                        diff = ""
+                        for c in commits:
+                            diff += f"\n--- Commit {c['id'][:7]} ---\n" + git.get_commit_diff(c["id"])
+                except:
+                    diff = "Erro ao coletar diff agrupado."
 
-            aggr_message = f"Push de {len(commits)} commits agrupados."
-            background_tasks.add_task(process_webhook_event, after, aggr_message, author, date, owner, repo_name, commit_summaries=commit_summaries, diff_override=diff, branch_name=branch_name)
+                aggr_message = f"Push de {len(commits)} commits agrupados."
+                background_tasks.add_task(process_webhook_event, after, aggr_message, author, date, owner, repo_name, commit_summaries=commit_summaries, diff_override=diff, branch_name=branch_name)
 
-        return {"status": "success", "message": f"{len(commits)} commits do repo {repo_name} (branch {branch_name}) adicionados a fila."}
+            return {"status": "success", "message": f"{len(commits)} commits do repo {repo_name} (branch {branch_name}) adicionados a fila."}
 
-    return {"status": "ignored", "message": "Evento nao suportado."}
+        return {"status": "ignored", "message": "Evento nao suportado."}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao processar webhook: {e}")
+        return {"status": "error", "message": f"Erro interno: {str(e)}"}
 
 
 if __name__ == "__main__":
