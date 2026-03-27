@@ -189,15 +189,19 @@ def save_report(repo_name: str, author: str, sha: str, date_str: str, report: st
         file.write(f"**Data do Commit:** {formatted_date}  \n\n")
         file.write("---\n\n")
         file.write(report)
-        
-        if diff:
+
+        # Só mostra o diff se ele existir e for valido (nao vazio, nao None, nao mensagem de erro)
+        if diff and len(diff.strip()) > 50 and "Erro" not in diff:
             diff_blocks = split_diff_by_file(diff)
-            file.write("\n\n---\n")
-            file.write(f"### 📝 Alterações no Código ({len(diff_blocks)} arquivos)\n")
-            
-            for block in diff_blocks:
-                file.write(f"\n#### {block['filename']}\n")
-                file.write(f"```diff\n{block['content']}\n```\n")
+            if diff_blocks:  # Só mostra se conseguiu parsear pelo menos um arquivo
+                file.write("\n\n---\n")
+                file.write(f"### 📝 Alterações no Código ({len(diff_blocks)} arquivos)\n")
+
+                for block in diff_blocks:
+                    file.write(f"\n#### {block['filename']}\n")
+                    file.write(f"```diff\n{block['content']}\n```\n")
+            else:
+                logger.warning(f"Diff nao pôde ser parseado para o commit {sha[:7]}")
 
     print(f"\n[SUCESSO] Relatorio Groq gerado com sucesso!\nCaminho: {file_name}")
 

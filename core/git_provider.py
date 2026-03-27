@@ -131,11 +131,11 @@ class GiteaProvider:
     def get_compare_info(self, base: str, head: str) -> Tuple[str, list[str]]:
         """
         Compara dois pontos na história e retorna o diff combinado e a lista de commits.
-        
+
         Args:
             base (str): SHA ou Ref de base (geralmente o commit antes da união).
             head (str): SHA ou Ref de destino (geralmente o commit de merge).
-            
+
         Returns:
             Tuple[str, list[str]]: O diff bruto e uma lista de mensagens de commits.
         """
@@ -143,14 +143,16 @@ class GiteaProvider:
         url = f"{self.base_url}/compare/{base}...{head}"
         response = self._make_request(url)
         data = response.json()
-        
+
         commits_data = data.get("commits", [])
         commit_summaries = [f"- {c['commit']['message']} ({c['sha'][:7]})" for c in commits_data]
-        
+        logger.info(f"Compare {base[:7]}...{head[:7]}: {len(commits_data)} commits encontrados")
+
         # O diff bruto pode ser obtido via API de compare com .diff
         diff_url = f"{self.base_url}/compare/{base}...{head}.diff"
         diff_response = self._make_request(diff_url, headers={"Authorization": f"token {self.token}"})
-        
+        logger.info(f"Diff coletado: {len(diff_response.text)} caracteres")
+
         return diff_response.text, commit_summaries
 
     def get_commit_diff(self, sha: str) -> str:
@@ -160,4 +162,5 @@ class GiteaProvider:
         # No Gitea, o diff bruto via API fica em /git/commits/{sha}.diff
         url = f"{self.base_url}/git/commits/{sha}.diff"
         response = self._make_request(url, headers={"Authorization": f"token {self.token}"})
+        logger.info(f"Diff do commit {sha[:7]}: {len(response.text)} caracteres")
         return response.text

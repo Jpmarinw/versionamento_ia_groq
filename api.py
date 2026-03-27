@@ -320,15 +320,23 @@ async def gitea_webhook(request: Request, background_tasks: BackgroundTasks):
                 after = payload.get("after")
 
                 git = GiteaProvider(user=owner, repo=repo_name)
+                diff = None
                 try:
                     if before and after and before != "0000000000000000000000000000000000000000":
                         diff, _ = git.get_compare_info(before, after)
+                        logger.info(f"Diff agrupado coletado com sucesso ({len(diff)} chars)")
                     else:
+                        logger.warning(f"Before invalid ou zerado: {before}")
                         diff = ""
                         for c in commits:
-                            diff += f"\n--- Commit {c['id'][:7]} ---\n" + git.get_commit_diff(c["id"])
-                except:
-                    diff = "Erro ao coletar diff agrupado."
+                            try:
+                                commit_diff = git.get_commit_diff(c["id"])
+                                diff += f"\n--- Commit {c['id'][:7]} ---\n" + commit_diff
+                            except Exception as e:
+                                logger.error(f"Erro ao buscar diff do commit {c['id'][:7]}: {e}")
+                except Exception as e:
+                    logger.error(f"Erro ao coletar diff agrupado: {e}")
+                    diff = None  # None indica que nao foi possivel obter o diff
 
                 aggr_message = f"Push de {len(commits)} commits agrupados."
                 background_tasks.add_task(process_webhook_event, after, aggr_message, author, date, owner, repo_name, commit_summaries=commit_summaries, diff_override=diff, branch_name=branch_name)
