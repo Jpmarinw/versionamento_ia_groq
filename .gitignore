@@ -36,3 +36,6 @@ htmlcov/
 # Temporários
 *.tmp
 *.bak
+
+# qwen
+.qwen

@@ -74,8 +74,8 @@ def main():
         
         # 3. Processa e Gera o Relatório
         print("3/3 -> Analisando contexto de código (isso poderá incluir vários commits se for merge).")
-        report = processor.process_and_report(message, diff, commit_summaries)
-        
+        report, commit_type = processor.process_and_report(message, diff, commit_summaries)
+
         # Salva o relatório num arquivo .md dentro da pasta reports
         save_report(
             repo_name=os.getenv("GITEA_REPO", "repo"),
@@ -84,7 +84,8 @@ def main():
             date_str=date,
             report=report,
             owner=os.getenv("GITEA_ORG"),
-            diff=diff
+            diff=diff,
+            commit_type=commit_type
         )
 
     except Exception as e:
@@ -137,7 +138,7 @@ def split_diff_by_file(diff_text: str):
         
     return blocks
 
-def save_report(repo_name: str, author: str, sha: str, date_str: str, report: str, branch_name: str = "main", owner: str = None, diff: str = None):
+def save_report(repo_name: str, author: str, sha: str, date_str: str, report: str, branch_name: str = "main", owner: str = None, diff: str = None, commit_type: str = "🟢 Commit Único"):
     """
     Salva o relatório Markdown e os metadados para sincronização futura.
     repo_name deve ser o nome original do repositório (ex: sfcs-gerencial).
@@ -186,7 +187,8 @@ def save_report(repo_name: str, author: str, sha: str, date_str: str, report: st
         file.write(f"**Repositório:** {repo_name}  \n")
         file.write(f"**Branch:** {branch_name}  \n")
         file.write(f"**Autor do Commit:** {author}  \n")
-        file.write(f"**Data do Commit:** {formatted_date}  \n\n")
+        file.write(f"**Data do Commit:** {formatted_date}  \n")
+        file.write(f"**Tipo:** {commit_type}  \n\n")
         file.write("---\n\n")
         file.write(report)
 
@@ -202,6 +204,14 @@ def save_report(repo_name: str, author: str, sha: str, date_str: str, report: st
                     file.write(f"```diff\n{block['content']}\n```\n")
             else:
                 logger.warning(f"Diff nao pôde ser parseado para o commit {sha[:7]}")
+        else:
+            # Log detalhado para depuração
+            if not diff:
+                logger.warning(f"Diff vazio ou None para o commit {sha[:7]}")
+            elif len(diff.strip()) <= 50:
+                logger.warning(f"Diff muito pequeno ({len(diff.strip())} chars) para o commit {sha[:7]}")
+            elif "Erro" in diff:
+                logger.warning(f"Diff contém erro para o commit {sha[:7]}: {diff[:200]}")
 
     print(f"\n[SUCESSO] Relatorio Groq gerado com sucesso!\nCaminho: {file_name}")
 
