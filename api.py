@@ -238,7 +238,7 @@ async def process_webhook_event(sha: str, message: str, author: str, date: str, 
         ai = GroqEngine()
         processor = CommitProcessor(ai)
 
-        report = await asyncio.to_thread(processor.process_and_report, message, diff, commit_summaries)
+        report, commit_type = await asyncio.to_thread(processor.process_and_report, message, diff, commit_summaries)
 
         save_report(
             repo_name=repo_name,
@@ -248,7 +248,8 @@ async def process_webhook_event(sha: str, message: str, author: str, date: str, 
             report=report,
             branch_name=branch_name,
             owner=owner,
-            diff=diff
+            diff=diff,
+            commit_type=commit_type
         )
 
         if "rate_limit_exceeded" in report.lower() or "limite de tokens" in report.lower():

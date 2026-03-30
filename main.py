@@ -158,11 +158,19 @@ def save_report(repo_name: str, author: str, sha: str, date_str: str, report: st
     try:
         from dateutil import parser
         # O parser do dateutil consegue interpretar quase qualquer formato ISO 8601 (com ou sem Z, offset, etc)
-        dt_utc = parser.isoparse(date_str)
+        dt_parsed = parser.isoparse(date_str)
         tz_offset = int(os.getenv("TIMEZONE_OFFSET", "-4")) # Fuso de Manaus por padrão
-        dt_local = dt_utc + datetime.timedelta(hours=tz_offset)
+        
+        # Se for naivo (sem timezone), assumimos que é UTC para poder converter
+        if dt_parsed.tzinfo is None:
+            dt_parsed = dt_parsed.replace(tzinfo=datetime.timezone.utc)
+            
+        # Converte para o fuso horário alvo usando astimezone (robusto para UTC e offsets)
+        target_tz = datetime.timezone(datetime.timedelta(hours=tz_offset))
+        dt_local = dt_parsed.astimezone(target_tz)
+        
         formatted_date = dt_local.strftime("%d/%m/%Y - %H:%M")
-        date_iso = dt_utc.isoformat()
+        date_iso = dt_parsed.isoformat()
     except Exception:
         # Fallback caso ocorra qualquer erro no parse
         formatted_date = date_str
@@ -192,8 +200,11 @@ def save_report(repo_name: str, author: str, sha: str, date_str: str, report: st
         file.write("---\n\n")
         file.write(report)
 
-        # Só mostra o diff se ele existir e for valido (nao vazio, nao None, nao mensagem de erro)
-        if diff and len(diff.strip()) > 50 and "Erro" not in diff:
+        # Só mostra o diff se ele existir e for valido (não vazio, não uma mensagem de erro da API)
+        # Verificamos se contém marcadores padrão de diff unificado para evitar falsos positivos com a palavra "Erro"
+        is_valid_diff = diff and any(marker in diff for marker in ["--- a/", "diff --git ", "@@ -"])
+        
+        if is_valid_diff and len(diff.strip()) > 50:
             diff_blocks = split_diff_by_file(diff)
             if diff_blocks:  # Só mostra se conseguiu parsear pelo menos um arquivo
                 file.write("\n\n---\n")
@@ -203,15 +214,15 @@ def save_report(repo_name: str, author: str, sha: str, date_str: str, report: st
                     file.write(f"\n#### {block['filename']}\n")
                     file.write(f"```diff\n{block['content']}\n```\n")
             else:
-                logger.warning(f"Diff nao pôde ser parseado para o commit {sha[:7]}")
+                logger.warning(f"Diff não pôde ser parseado para o commit {sha[:7]}")
         else:
             # Log detalhado para depuração
             if not diff:
                 logger.warning(f"Diff vazio ou None para o commit {sha[:7]}")
             elif len(diff.strip()) <= 50:
                 logger.warning(f"Diff muito pequeno ({len(diff.strip())} chars) para o commit {sha[:7]}")
-            elif "Erro" in diff:
-                logger.warning(f"Diff contém erro para o commit {sha[:7]}: {diff[:200]}")
+            else:
+                logger.warning(f"Conteúdo não parece ser um Diff válido para o commit {sha[:7]}. Verifique se a API retornou um erro.")
 
     print(f"\n[SUCESSO] Relatorio Groq gerado com sucesso!\nCaminho: {file_name}")
 
