@@ -1,0 +1,185 @@
+{% extends "base.html" %} {% block content %}
+<div
+  style="
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 2rem;
+    align-items: start;
+  "
+>
+  <!-- Coluna Principal: Repositórios -->
+  <section>
+    <h2
+      style="
+        font-size: 1.5rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--text-main);
+      "
+    >
+      <span>📁</span> Meus Projetos
+    </h2>
+    <div
+      style="
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1rem;
+      "
+    >
+      {% for repo in repos %}
+      <a href="/repo/{{ repo }}" style="text-decoration: none; color: inherit">
+        <div class="repo-card">
+          <h3 style="font-size: 1.1rem; text-transform: capitalize">
+            {{ repo.replace('_', ' ').replace('-', ' ') }}
+          </h3>
+          <p
+            style="
+              font-size: 0.8rem;
+              color: var(--text-muted);
+              margin-top: 0.5rem;
+            "
+          >
+            Ver histórico →
+          </p>
+        </div>
+      </a>
+      {% else %}
+      <div
+        style="
+          grid-column: 1/-1;
+          text-align: center;
+          padding: 4rem;
+          background: var(--card-bg);
+          border-radius: 12px;
+          border: 1px dashed var(--border);
+        "
+      >
+        <p style="color: var(--text-muted)">
+          Nenhum relatório gerado ainda. Aguardando webhooks...
+        </p>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- Barra Lateral: Atividades Recentes -->
+  <aside
+    style="
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+    "
+  >
+    <h2
+      style="
+        font-size: 1.1rem;
+        margin-bottom: 1rem;
+        color: var(--text-main);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      "
+    >
+      <span>⚡</span> Atividade Recente
+    </h2>
+    <div
+      id="recent-reports-list"
+      style="display: flex; flex-direction: column; gap: 1rem"
+    >
+      {% for report in recent_reports %}
+      <div
+        class="recent-item"
+        data-id="{{ report.sort_key }}"
+        style="border-bottom: 1px solid var(--border); padding-bottom: 0.75rem"
+      >
+        <a
+          href="/repo/{{ report.repo }}/{{ report.filename }}"
+          style="
+            text-decoration: none;
+            color: var(--primary);
+            font-weight: 500;
+            font-size: 0.9rem;
+            display: block;
+            margin-bottom: 0.25rem;
+          "
+        >
+          {{ report.name[:30] }}{% if report.name|length > 30 %}...{% endif %}
+        </a>
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+          "
+        >
+          <span>{{ report.repo }}</span>
+          <span>{{ report.date }}</span>
+        </div>
+      </div>
+      {% else %}
+      <p style="font-size: 0.875rem; color: var(--text-muted)">
+        Sem atividades.
+      </p>
+      {% endfor %}
+    </div>
+  </aside>
+</div>
+
+<script>
+  let lastReportId =
+    "{{ recent_reports[0].sort_key if recent_reports else '' }}";
+  const listContainer = document.getElementById("recent-reports-list");
+
+  async function checkUpdates() {
+    try {
+      const response = await fetch("/api/recent-updates");
+      const reports = await response.json();
+
+      if (reports.length > 0 && reports[0].sort_key !== lastReportId) {
+        lastReportId = reports[0].sort_key;
+        renderReports(reports);
+      }
+    } catch (err) {
+      console.error("Erro ao buscar atualizações:", err);
+    }
+  }
+
+  function renderReports(reports) {
+    listContainer.innerHTML = reports
+      .map(
+        (r) => `
+      <div class="recent-item" data-id="${r.sort_key}" style="border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; animation: fadeIn 0.5s ease-in-out;">
+        <a href="/repo/${r.repo}/${r.filename}" style="text-decoration: none; color: var(--primary); font-weight: 500; font-size: 0.9rem; display: block; margin-bottom: 0.25rem;">
+          ${r.name.length > 30 ? r.name.substring(0, 30) + "..." : r.name}
+        </a>
+        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted);">
+          <span>${r.repo}</span>
+          <span>${r.date}</span>
+        </div>
+      </div>
+    `,
+      )
+      .join("");
+  }
+
+  // Verificar a cada 10 segundos
+  setInterval(checkUpdates, 10000);
+</script>
+
+<style>
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateX(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+</style>
+{% endblock %}

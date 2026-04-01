@@ -9,6 +9,33 @@ wheels/
 # Virtual environments
 .venv
 .env
+.env.local
 reports/
-__pycache__/
 
+# Logs
+*.log
+logs_backup/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testes
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Temporários
+*.tmp
+*.bak
+
+# qwen
+.qwen

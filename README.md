@@ -19,7 +19,6 @@ Esta versão do AI Commit Reporter foca em extrema velocidade de inferência ace
    ```
 
 2. **Configure o `.env` do seu projeto:**
-
    - Faça uma cópia do arquivo `.env.example`:
 
    ```bash
@@ -27,10 +26,10 @@ Esta versão do AI Commit Reporter foca em extrema velocidade de inferência ace
    ```
 
    - Preencha:
-      - `GITEA_TOKEN`, `GITEA_USER`, `GITEA_REPO`, `GITEA_URL` (Para Gitea).
-      - `GITHUB_TOKEN`, `GITHUB_USER`, `GITHUB_REPO` (Caso use GitHub).
-      - `GROQ_API_KEY`: Você pode obter de graça no console de devs do Groq (<https://console.groq.com/keys>).
-      - `TIMEZONE_OFFSET`: Ajuste para sua localização (padrão é `-4` para Manaus). Pode usar `-3` para Brasília.
+     - `GITEA_TOKEN`, `GITEA_USER`, `GITEA_REPO`, `GITEA_URL` (Para Gitea).
+     - `GITHUB_TOKEN`, `GITHUB_USER`, `GITHUB_REPO` (Caso use GitHub).
+     - `GROQ_API_KEY`: Você pode obter de graça no console de devs do Groq (<https://console.groq.com/keys>).
+     - `TIMEZONE_OFFSET`: Ajuste para sua localização (padrão é `-4` para Manaus). Pode usar `-3` para Brasília.
 
 ## 🧑‍💻 Testando Localmente
 
